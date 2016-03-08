@@ -54,6 +54,7 @@ helpQuery=Query the table
 helpSampleSQL=Sample SQL Script
 helpStatements=SQL statements
 helpUpdate=Change data in a row
+helpVersion=Version
 helpWithColumnsIdName=with ID and NAME columns
 key.alt=Alt
 key.ctrl=Ctrl

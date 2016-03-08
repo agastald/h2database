@@ -54,6 +54,7 @@ helpQuery=Pesquisar uma tabela
 helpSampleSQL=Scripts de exemplo
 helpStatements=Comandos SQL
 helpUpdate=Alterar os dados de uma linha
+helpVersion=Versão
 helpWithColumnsIdName=com as colunas ID e NAME
 key.alt=#Alt
 key.ctrl=#Ctrl
