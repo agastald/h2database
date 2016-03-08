@@ -128,7 +128,14 @@ Initial Developer: H2 Group
                         <option value="2">
                             ${text.toolbar.autoComplete.full}
                         </option>
-                    </select>
+                    </select>&nbsp;
+                </td>
+                <td class="toolbar">
+                    <input type="checkbox" name="echosql" value="echosql" onclick=
+                            "javascript:parent.h2result.document.location='query.do?jsessionid=${sessionId}&amp;sql=@echosql ' + (document.header.echosql.checked ? 'on' : 'off') + '.';"/>
+                </td>
+                <td class="toolbar">
+                    ${text.toolbar.echosql}&nbsp;
                 </td>
                 <td class="toolbar">
                     <a href="help.jsp?jsessionid=${sessionId}" target="h2result">
