@@ -164,6 +164,7 @@ Initial Developer: H2 Group
 <script type="text/javascript">
 <!--
     document.header.autoCommit.checked = '${autoCommit}' != '';
+    document.header.rowcount.value = ${maxrows};
 //-->
 </script>
 </body>
