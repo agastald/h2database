@@ -143,6 +143,13 @@ Initial Developer: H2 Group
                     </select>
                 </td>
                 <td class="toolbar">
+                    <input type="checkbox" name="echosql" value="echosql" onclick=
+                            "javascript:parent.h2result.document.location='query.do?jsessionid=${sessionId}&amp;sql=@echosql ' + (document.header.echosql.checked ? 'on' : 'off') + '.';"/>
+                </td>
+                <td class="toolbar">
+                    ${text.toolbar.echosql}&nbsp;
+                </td>
+                <td class="toolbar">
                     <a href="help.jsp?jsessionid=${sessionId}" target="h2result">
                         <img src="icon_help.gif"
                             onmouseover="this.className ='icon_hover'"

@@ -950,6 +950,7 @@ public class WebApp {
         session.put("autoCommit", "checked");
         session.put("autoComplete", "1");
         session.put("maxrows", "1000");
+        session.put("echosql", "false");
         boolean isH2 = url.startsWith("jdbc:h2:");
         try {
             Connection conn = server.getConnection(driver, url, user, password);
@@ -1054,7 +1055,7 @@ public class WebApp {
      * @param buff the target buffer
      */
     void query(Connection conn, String s, int i, int size, StringBuilder buff) {
-        if (!(s.startsWith("@") && s.endsWith("."))) {
+        if (!(s.startsWith("@") && s.endsWith(".")) && isEchosql()) {
             buff.append(PageParser.escapeHtml(s + ";")).append("<br />");
         }
         boolean forceEdit = s.startsWith("@edit");
@@ -1258,6 +1259,10 @@ public class WebApp {
         return maxrows;
     }
 
+    private boolean isEchosql() {
+        return Boolean.TRUE.equals(session.get("echosql"));
+    }
+
     private String getResult(Connection conn, int id, String sql,
             boolean allowEdit, boolean forceEdit) {
         try {
@@ -1333,6 +1338,15 @@ public class WebApp {
                 int count = Integer.decode(sql.substring(0, idx));
                 sql = sql.substring(idx).trim();
                 return executeLoop(conn, count, sql);
+            } else if (isBuiltIn(sql, "@echosql")) {
+                Boolean echoSql = sql.substring("@echosql".length())
+                        .trim().toLowerCase().startsWith("on");
+                session.put("echosql", echoSql);
+                if (echoSql) {
+                    return "${text.result.echosqlOn}";
+                } else {
+                    return "${text.result.echosqlOff}";
+                }
             } else if (isBuiltIn(sql, "@maxrows")) {
                 int maxrows = (int) Double.parseDouble(
                         sql.substring("@maxrows".length()).trim());
