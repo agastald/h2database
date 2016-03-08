@@ -139,6 +139,10 @@ Initial Developer: H2 Group
                             title="${text.a.help}" border="1"/>
                     </a>
                 </td>
+                <td class="toolbar">&nbsp;&nbsp;</td>
+                <td class="toolbar">
+                    <div style="color: blue; font-weight: bold;" id="settingName">${setting}</div>
+                </td>
             </tr>
         </table>
     </form>

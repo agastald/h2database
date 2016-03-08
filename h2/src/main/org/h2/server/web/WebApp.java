@@ -950,6 +950,7 @@ public class WebApp {
         session.put("autoCommit", "checked");
         session.put("autoComplete", "1");
         session.put("maxrows", "1000");
+        session.put("version", Constants.getFullVersion());
         boolean isH2 = url.startsWith("jdbc:h2:");
         try {
             Connection conn = server.getConnection(driver, url, user, password);

@@ -92,6 +92,11 @@ function set(s) {
 ${text.helpAddDriversText}
 </p>
 
+<h3>${text.helpVersion}</h3>
+<p>
+${version}
+</p>
+
 </div>
 
 <table id="h2auto" class="autoComp"><tbody></tbody></table>
