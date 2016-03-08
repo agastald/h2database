@@ -1312,6 +1312,11 @@ public class WebApp {
                 list = true;
                 sql = sql.substring("@list".length()).trim();
             }
+            if (isBuiltIn(sql, "@count")) {
+                sql = sql.substring("@count".length()).trim();
+                if (sql.endsWith(";")) sql = sql.substring(0,sql.length() - 1);
+                sql = "SELECT COUNT(*) FROM (" + sql + ")";
+            }
             if (isBuiltIn(sql, "@meta")) {
                 metadata = true;
                 sql = sql.substring("@meta".length()).trim();
