@@ -2,6 +2,7 @@
 a.help=Help
 a.language=English
 a.lynxNotSupported=Sorry, Lynx not supported yet
+a.newConnection=New connection
 a.password=Password
 a.remoteConnectionsDisabled=Sorry, remote connections ('webAllowOthers') are disabled on this server.
 a.title=H2 Console

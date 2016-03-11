@@ -15,6 +15,19 @@ Initial Developer: H2 Group
         <table class="toolbar" cellspacing="0" cellpadding="0">
             <tr class="toolbar">
                 <td class="toolbar">
+                    <div style="color: blue; font-weight: bold; margin: 0px 5px;" id="settingName">${setting}</div>
+                </td>
+                <td class="toolbar">
+                    <img src="icon_line.gif" class="iconLine" alt=""/>
+                    <a href="/" target="_blank">
+                        <img src="icon_plus.png"
+                             onmouseover="this.className ='icon_hover'"
+                             onmouseout="this.className ='icon'"
+                             class="icon" alt="${text.a.newConnection}"
+                             title="${text.a.newConnection}" border="1"/>
+                    </a>
+                </td>
+                <td class="toolbar">
                     <a href="logout.do?jsessionid=${sessionId}" target="_parent">
                         <img src="icon_disconnect.gif"
                             onmouseover="this.className ='icon_hover'"
@@ -152,15 +165,11 @@ Initial Developer: H2 Group
                 <td class="toolbar">
                     <a href="help.jsp?jsessionid=${sessionId}" target="h2result">
                         <img src="icon_help.gif"
-                            onmouseover="this.className ='icon_hover'"
-                            onmouseout="this.className ='icon'"
-                            class="icon" alt="${text.a.help}"
-                            title="${text.a.help}" border="1"/>
+                             onmouseover="this.className ='icon_hover'"
+                             onmouseout="this.className ='icon'"
+                             class="icon" alt="${text.a.help}"
+                             title="${text.a.help}" border="1"/>
                     </a>
-                </td>
-                <td class="toolbar">&nbsp;&nbsp;</td>
-                <td class="toolbar">
-                    <div style="color: blue; font-weight: bold;" id="settingName">${setting}</div>
                 </td>
             </tr>
         </table>

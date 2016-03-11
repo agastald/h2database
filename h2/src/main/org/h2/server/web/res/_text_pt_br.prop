@@ -2,6 +2,7 @@
 a.help=Ajuda
 a.language=Português (Brasil)
 a.lynxNotSupported=Lynx não é suportado
+a.newConnection=Nova conexão
 a.password=Senha
 a.remoteConnectionsDisabled=Conexões remotas ('webAllowOthers') estão desativadas neste servidor.
 a.title=H2 Terminal
