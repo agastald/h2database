@@ -86,6 +86,7 @@ result.echosqlOn=Echo SQL is now ON
 result.maxrowsSet=Max rowcount is set
 result.noRows=no rows
 result.noRunningStatement=There is currently no running statement
+result.reconnected=Reconnected!
 result.rows=rows
 result.statementWasCanceled=The statement was canceled
 result.updateCount=Update count

@@ -10,18 +10,11 @@ import java.io.PrintStream;
 import java.io.PrintWriter;
 import java.io.StringReader;
 import java.io.StringWriter;
+import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.math.BigDecimal;
-import java.sql.Connection;
-import java.sql.DatabaseMetaData;
-import java.sql.ParameterMetaData;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.ResultSetMetaData;
-import java.sql.SQLException;
-import java.sql.Statement;
-import java.sql.Types;
+import java.sql.*;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -1432,11 +1425,50 @@ public class WebApp {
                 stat.close();
             }
             return buff.toString();
+        } catch (SQLRecoverableException re) {
+            boolean isOracle = session.get("url").toString().startsWith("jdbc:oracle:");
+            if (isOracle) {
+                if ("Closed Connection".equals(re.getMessage())) {
+                    Boolean reconnect = (Boolean) session.get("reconnect");
+                    if (reconnect == null) {
+                        try {
+                            session.put("reconnect",Boolean.TRUE);
+                            String result = getResult(reconnect(conn), id, sql, allowEdit, forceEdit);
+                            session.put("reconnect",null);
+                            String reconnectedStatus = "<div class=\"reconnected\">${text.result.reconnected}</div>";
+                            return reconnectedStatus + result;
+                        } catch (Throwable e) {
+                            return getStackTrace(id, e, session.getContents().isH2());
+                        }
+                    }
+                }
+            }
+            return getStackTrace(id, re, session.getContents().isH2());
         } catch (Throwable e) {
             // throwable: including OutOfMemoryError and so on
             return getStackTrace(id, e, session.getContents().isH2());
         } finally {
             session.executingStatement = null;
+        }
+    }
+
+    private Connection reconnect(Connection closedConnection) throws SQLException {
+        ConnectionInfo info = server.getSetting((String) session.get("setting"));
+        Connection newConnection = server.getConnection(info.driver, info.url,
+                info.user, passwordFromOracleConnection(closedConnection));
+        newConnection.setAutoCommit(closedConnection.getAutoCommit());
+        newConnection.setTransactionIsolation(closedConnection.getTransactionIsolation());
+        session.setConnection(newConnection);
+        return newConnection;
+    }
+
+    private String passwordFromOracleConnection(Connection connection) {
+        try {
+            Field field = connection.getClass().getDeclaredField("password");
+            field.setAccessible(true);
+            return (String) field.get(connection);
+        } catch (Throwable t) {
+            throw new RuntimeException("Error trying to reconnect");
         }
     }
 

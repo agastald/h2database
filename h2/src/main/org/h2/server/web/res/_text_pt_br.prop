@@ -87,6 +87,7 @@ result.maxrowsSet=Número máximo de linhas foi alterado
 result.noRows=sem linhas
 result.noRunningStatement=Actualmente não existe nenhum comando em execução
 result.rows=linhas
+result.reconnected=Reconectado!
 result.statementWasCanceled=O comando foi cancelado
 result.updateCount=Número de registros alterados
 resultEdit.action=Ação
