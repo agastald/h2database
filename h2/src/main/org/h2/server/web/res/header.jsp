@@ -20,7 +20,7 @@ Initial Developer: H2 Group
                 <td class="toolbar">
                     <img src="icon_line.gif" class="iconLine" alt=""/>
                     <a href="/" target="_blank">
-                        <img src="icon_plus.png"
+                        <img src="icon_new_window.png"
                              onmouseover="this.className ='icon_hover'"
                              onmouseout="this.className ='icon'"
                              class="icon" alt="${text.a.newConnection}"
