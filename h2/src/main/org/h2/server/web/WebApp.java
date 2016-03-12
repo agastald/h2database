@@ -940,9 +940,9 @@ public class WebApp {
         String url = attributes.getProperty("url", "");
         String user = attributes.getProperty("user", "");
         String password = attributes.getProperty("password", "");
-        session.put("autoCommit", "checked");
         session.put("autoComplete", "1");
         session.put("maxrows", String.valueOf(SysProperties.MAX_ROWS));
+        session.put("autoReconnect", String.valueOf(SysProperties.CONSOLE_AUTO_RECONNECT));
         session.put("echosql", "false");
         session.put("version", Constants.getFullVersion());
         boolean isH2 = url.startsWith("jdbc:h2:");
@@ -951,6 +951,9 @@ public class WebApp {
             session.setConnection(conn);
             session.put("url", url);
             session.put("user", user);
+            session.put("password", password);
+            session.put("autoCommit", conn.getAutoCommit() ? "checked" : "");
+            session.put("transactionIsolation", conn.getTransactionIsolation());
             session.remove("error");
             settingSave();
             return "frame.jsp";
@@ -1289,9 +1292,11 @@ public class WebApp {
             boolean list = false;
             if (isBuiltIn(sql, "@autocommit_true")) {
                 conn.setAutoCommit(true);
+                session.put("autoCommit", "checked");
                 return "${text.result.autoCommitOn}";
             } else if (isBuiltIn(sql, "@autocommit_false")) {
                 conn.setAutoCommit(false);
+                session.put("autoCommit", "");
                 return "${text.result.autoCommitOff}";
             } else if (isBuiltIn(sql, "@cancel")) {
                 stat = session.executingStatement;
@@ -1316,6 +1321,10 @@ public class WebApp {
                 if (sql.endsWith(";")) sql = sql.substring(0,sql.length() - 1);
                 sql = "SELECT COUNT(*) FROM (" + sql + ")";
             }
+            if (isBuiltIn(sql, "@close")) {
+                sql = sql.substring("@close".length()).trim();
+                session.getConnection().close();
+            }
             if (isBuiltIn(sql, "@meta")) {
                 metadata = true;
                 sql = sql.substring("@meta".length()).trim();
@@ -1332,6 +1341,11 @@ public class WebApp {
                 int count = Integer.decode(sql.substring(0, idx));
                 sql = sql.substring(idx).trim();
                 return executeLoop(conn, count, sql);
+            } else if (isBuiltIn(sql, "@autoReconnect")) {
+                String autoReconnect = sql.substring("@autoReconnect".length())
+                        .trim().toLowerCase().startsWith("on") ? "true" : "false";
+                session.put("autoReconnect", autoReconnect);
+                return "${text.result.autoReconnect." + autoReconnect + "}";
             } else if (isBuiltIn(sql, "@echosql")) {
                 Boolean echoSql = sql.substring("@echosql".length())
                         .trim().toLowerCase().startsWith("on");
@@ -1376,6 +1390,7 @@ public class WebApp {
                 if (s.length() > 0) {
                     int level = Integer.parseInt(s);
                     conn.setTransactionIsolation(level);
+                    session.put("transactionIsolation", level);
                 }
                 buff.append("Transaction Isolation: " +
                         conn.getTransactionIsolation() + "<br />");
@@ -1425,50 +1440,52 @@ public class WebApp {
                 stat.close();
             }
             return buff.toString();
-        } catch (SQLRecoverableException re) {
-            boolean isOracle = session.get("url").toString().startsWith("jdbc:oracle:");
-            if (isOracle) {
-                if ("Closed Connection".equals(re.getMessage())) {
-                    Boolean reconnect = (Boolean) session.get("reconnect");
-                    if (reconnect == null) {
-                        try {
-                            session.put("reconnect",Boolean.TRUE);
-                            String result = getResult(reconnect(conn), id, sql, allowEdit, forceEdit);
-                            session.put("reconnect",null);
-                            String reconnectedStatus = "<div class=\"reconnected\">${text.result.reconnected}</div>";
-                            return reconnectedStatus + result;
-                        } catch (Throwable e) {
-                            return getStackTrace(id, e, session.getContents().isH2());
-                        }
-                    }
-                }
-            }
-            return getStackTrace(id, re, session.getContents().isH2());
         } catch (Throwable e) {
             // throwable: including OutOfMemoryError and so on
+            if (shouldTryToReconnect(e)) {
+                try {
+                    return "<div class=\"reconnected\">${text.result.reconnected}</div>" +
+                            getResult(reconnect(), id, sql, allowEdit, forceEdit);
+                } catch (Throwable e2) {
+                    return getStackTrace(id, e2, session.getContents().isH2());
+                }
+            }
             return getStackTrace(id, e, session.getContents().isH2());
         } finally {
             session.executingStatement = null;
         }
     }
 
-    private Connection reconnect(Connection closedConnection) throws SQLException {
-        ConnectionInfo info = server.getSetting((String) session.get("setting"));
-        Connection newConnection = server.getConnection(info.driver, info.url,
-                info.user, passwordFromOracleConnection(closedConnection));
-        newConnection.setAutoCommit(closedConnection.getAutoCommit());
-        newConnection.setTransactionIsolation(closedConnection.getTransactionIsolation());
-        session.setConnection(newConnection);
-        return newConnection;
+    private boolean shouldTryToReconnect(Throwable e) {
+        if ("true".equals(session.get("autoReconnect"))) {
+            String message = e.toString();
+            boolean isClosedConnectionException = false
+                // oracle
+                || "java.sql.SQLRecoverableException: Closed Connection".equals(message)
+                // sqlserver
+                || "com.microsoft.sqlserver.jdbc.SQLServerException: The connection is closed.".equals(message)
+                // h2
+                || "org.h2.jdbc.JdbcSQLException: The object is already closed [90007-191]".equals(message);
+            return isClosedConnectionException;
+        }
+        return false;
     }
 
-    private String passwordFromOracleConnection(Connection connection) {
+    private Connection reconnect() {
         try {
-            Field field = connection.getClass().getDeclaredField("password");
-            field.setAccessible(true);
-            return (String) field.get(connection);
+            ConnectionInfo info = server.getSetting((String) session.get("setting"));
+            String password = (String) session.get("password");
+            Boolean autoCommit = "checked".equals(session.get("autoCommit"));
+            Integer transactionIsolation = (Integer) session.get("transactionIsolation");
+
+            Connection newConnection = server.getConnection(info.driver, info.url, info.user, password);
+            newConnection.setAutoCommit(autoCommit);
+            newConnection.setTransactionIsolation(transactionIsolation);
+
+            session.setConnection(newConnection);
+            return newConnection;
         } catch (Throwable t) {
-            throw new RuntimeException("Error trying to reconnect");
+            throw new RuntimeException("Error trying to reconnect",t);
         }
     }
 

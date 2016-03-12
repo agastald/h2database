@@ -163,6 +163,13 @@ Initial Developer: H2 Group
                     ${text.toolbar.echosql}&nbsp;
                 </td>
                 <td class="toolbar">
+                    <input type="checkbox" name="autoReconnect" value="autoReconnect" onclick=
+                            "javascript:parent.h2result.document.location='query.do?jsessionid=${sessionId}&amp;sql=@autoReconnect ' + (document.header.autoReconnect.checked ? 'on' : 'off') + '.';"/>
+                </td>
+                <td class="toolbar">
+                    ${text.toolbar.autoReconnect}&nbsp;
+                </td>
+                <td class="toolbar">
                     <a href="help.jsp?jsessionid=${sessionId}" target="h2result">
                         <img src="icon_help.gif"
                              onmouseover="this.className ='icon_hover'"
@@ -177,6 +184,7 @@ Initial Developer: H2 Group
 <script type="text/javascript">
 <!--
     document.header.autoCommit.checked = '${autoCommit}' != '';
+    document.header.autoReconnect.checked = '${autoReconnect}' == 'true';
     document.header.rowcount.value = ${maxrows};
 //-->
 </script>

@@ -188,6 +188,13 @@ public class SysProperties {
             Utils.getProperty("h2.consoleTimeout", 30 * 60 * 1000);
 
     /**
+     * System property <code>h2.consoleAutoReconnect</code> (default: true).<br />
+     * H2 Console: attempt to auto reconnect on a lost connection.
+     */
+    public static final boolean CONSOLE_AUTO_RECONNECT =
+            Utils.getProperty("h2.consoleAutoReconnect", true);
+
+    /**
      * System property <code>h2.dataSourceTraceLevel</code> (default: 1).<br />
      * The trace level of the data source implementation. Default is 1 for
      * error.

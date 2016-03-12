@@ -318,3 +318,8 @@ table.tool, table.tool tr, table.tool tr td {
     padding: 0px;
     border: 0px;
 }
+
+.reconnected {
+    color: magenta;
+    font-weight: bold;
+}
