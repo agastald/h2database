@@ -942,8 +942,8 @@ public class WebApp {
         String password = attributes.getProperty("password", "");
         session.put("autoComplete", "1");
         session.put("maxrows", String.valueOf(SysProperties.MAX_ROWS));
-        session.put("autoReconnect", String.valueOf(SysProperties.CONSOLE_AUTO_RECONNECT));
-        session.put("echosql", "false");
+        session.put("autoReconnect", SysProperties.CONSOLE_AUTO_RECONNECT ? "on" : "off");
+        session.put("echosql", "off");
         session.put("version", Constants.getFullVersion());
         boolean isH2 = url.startsWith("jdbc:h2:");
         try {
@@ -1257,7 +1257,7 @@ public class WebApp {
     }
 
     private boolean isEchosql() {
-        return Boolean.TRUE.equals(session.get("echosql"));
+        return "on".equals(session.get("echosql"));
     }
 
     private String getResult(Connection conn, int id, String sql,
@@ -1343,18 +1343,14 @@ public class WebApp {
                 return executeLoop(conn, count, sql);
             } else if (isBuiltIn(sql, "@autoReconnect")) {
                 String autoReconnect = sql.substring("@autoReconnect".length())
-                        .trim().toLowerCase().startsWith("on") ? "true" : "false";
+                        .trim().toLowerCase().startsWith("on") ? "on" : "off";
                 session.put("autoReconnect", autoReconnect);
                 return "${text.result.autoReconnect." + autoReconnect + "}";
             } else if (isBuiltIn(sql, "@echosql")) {
-                Boolean echoSql = sql.substring("@echosql".length())
-                        .trim().toLowerCase().startsWith("on");
+                String echoSql = sql.substring("@echosql".length())
+                        .trim().toLowerCase().startsWith("on") ? "on" : "off";
                 session.put("echosql", echoSql);
-                if (echoSql) {
-                    return "${text.result.echosqlOn}";
-                } else {
-                    return "${text.result.echosqlOff}";
-                }
+                return "${text.result.echosql." + echoSql + "}";
             } else if (isBuiltIn(sql, "@maxrows")) {
                 int maxrows = (int) Double.parseDouble(
                         sql.substring("@maxrows".length()).trim());
@@ -1457,7 +1453,7 @@ public class WebApp {
     }
 
     private boolean shouldTryToReconnect(Throwable e) {
-        if ("true".equals(session.get("autoReconnect"))) {
+        if ("on".equals(session.get("autoReconnect"))) {
             String message = e.toString();
             boolean isClosedConnectionException = false
                 // oracle

@@ -156,18 +156,12 @@ Initial Developer: H2 Group
                     </select>
                 </td>
                 <td class="toolbar">
-                    <input type="checkbox" name="echosql" value="echosql" onclick=
-                            "javascript:parent.h2result.document.location='query.do?jsessionid=${sessionId}&amp;sql=@echosql ' + (document.header.echosql.checked ? 'on' : 'off') + '.';"/>
-                </td>
-                <td class="toolbar">
-                    ${text.toolbar.echosql}&nbsp;
-                </td>
-                <td class="toolbar">
-                    <input type="checkbox" name="autoReconnect" value="autoReconnect" onclick=
-                            "javascript:parent.h2result.document.location='query.do?jsessionid=${sessionId}&amp;sql=@autoReconnect ' + (document.header.autoReconnect.checked ? 'on' : 'off') + '.';"/>
-                </td>
-                <td class="toolbar">
-                    ${text.toolbar.autoReconnect}&nbsp;
+                    <img src="icon_options.png"
+                         onmouseover="this.className ='icon_hover'"
+                         onmouseout="this.className ='icon'"
+                         onclick="showOptions(this)"
+                         class="icon" alt="${text.toolbar.options}"
+                         title="${text.toolbar.options}" border="1"/>
                 </td>
                 <td class="toolbar">
                     <a href="help.jsp?jsessionid=${sessionId}" target="h2result">
@@ -180,12 +174,73 @@ Initial Developer: H2 Group
                 </td>
             </tr>
         </table>
+        <div id="limbo" style="position:absolute; top:0px; left:0px; display:none; z-index: 0;">
+            <div id="options" style="border: solid 1px black;">
+                <img src="ico_remove.gif" style='position:absolute; top:5px; right:5px; cursor:pointer;'/>
+                <table class="login" cellspacing="0" cellpadding="0">
+                    <tr class="login">
+                        <th class="login" colspan="2">${text.toolbar.options}</th>
+                    </tr>
+                    <tr>
+                        <td class="toolbar">
+                            <input type="checkbox" name="echosql" />
+                        </td>
+                        <td class="toolbar">
+                            ${text.toolbar.echosql}&nbsp;
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="toolbar">
+                            <input type="checkbox" name="autoReconnect" />
+                        </td>
+                        <td class="toolbar">
+                            ${text.toolbar.autoReconnect}&nbsp;
+                        </td>
+                    </tr>
+                </table>
+            </div>
+        </div>
     </form>
 <script type="text/javascript">
 <!--
     document.header.autoCommit.checked = '${autoCommit}' != '';
-    document.header.autoReconnect.checked = '${autoReconnect}' == 'true';
+    document.header.autoReconnect.checked = '${autoReconnect}' == 'on';
+    document.header.echosql.checked = '${echosql}' == 'on';
     document.header.rowcount.value = ${maxrows};
+
+    function showOptions(el) {
+        if (!window.parent.document.getElementById('dropdown')) {
+            var op = document.getElementById('options');
+            var d1 = document.createElement('div');
+            d1.id = 'dropdown';
+            d1.appendChild(op);
+            window.parent.document.children[0].appendChild(d1); // due to frames
+            d1.style.position = 'absolute';
+            d1.style.top = el.offsetTop + el.offsetHeight + 'px';
+            d1.style.left = el.parentElement.offsetLeft - op.offsetWidth + 'px';
+            d1.style.zIndex = 9999;
+            d1.style.overflow = 'overlay';
+            el.previousBorder = el.style.border;
+            el.style.border = 'inset 1px #aca899';
+            op.caller = el;
+            op.children[0].onclick = closeOptions;
+        }
+    }
+
+    function closeOptions(e) {
+        var target = e.target.parentElement; // options is parent of close button
+        var parent = target.parentElement;
+        document.getElementById('limbo').appendChild(target);
+        parent.remove();
+        target.caller.style.border = target.caller.previousBorder;
+    }
+
+    function toggle() {
+        parent.h2result.document.location='query.do?jsessionid=${sessionId}&sql=@' + this.name + ' ' + (this.checked ? 'on' : 'off') + '.';
+    }
+
+    document.header.autoReconnect.onclick = toggle;
+    document.header.echosql.onclick = toggle;
 //-->
 </script>
 </body>
