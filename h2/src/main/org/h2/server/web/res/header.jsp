@@ -19,7 +19,7 @@ Initial Developer: H2 Group
                 </td>
                 <td class="toolbar">
                     <img src="icon_line.gif" class="iconLine" alt=""/>
-                    <a href="/" target="_blank">
+                    <a href="index.jsp" target="_blank">
                         <img src="icon_new_window.png"
                              onmouseover="this.className ='icon_hover'"
                              onmouseout="this.className ='icon'"
