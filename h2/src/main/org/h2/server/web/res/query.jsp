@@ -260,6 +260,10 @@ function keyDown(event) {
             showOutput('');
         }
     }
+    if (key == 9) { // press tab
+        event.preventDefault();
+        insertTab(event.target);
+    }
     // alert('key:' + key);
     return true;
     // bs:8 ret:13 lt:37 up:38 rt:39 dn:40 tab:9
@@ -503,6 +507,12 @@ function doAutoSelect() {
     } catch (e) {
         field.selectionStart = field.selectionEnd = position;
     }
+}
+
+function insertTab(element,theTab) {
+    var event = document.createEvent('TextEvent');
+    event.initTextEvent('textInput', true, true, null, '\t');
+    element.dispatchEvent(event);
 }
 
 //-->
