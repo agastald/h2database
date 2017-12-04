@@ -196,14 +196,20 @@ function showAutoCompleteNow() {
     showAutoCompleteWait = 0;
 }
 
+// para debugar: $('#sql').onkeydown = function(event) {...}
 function keyDown(event) {
-    var key=event.keyCode? event.keyCode : event.charCode;
+    var key = event.keyCode? event.keyCode : event.charCode;
+    // console.log("key=" + key + ", shift=" + event.shiftKey + ", ctrl=" + (event.ctrlKey || event.metaKey));
     if (key == null) {
         return false;
     }
     if (key == 13 && (event.ctrlKey || event.metaKey)) {
         // ctrl + return, cmd + return
         submitAll();
+        return false;
+    } else if (key == 188 && event.shiftKey && (event.ctrlKey || event.metaKey) ) {
+        // shift + ctrl + ,
+        doAutoSelect();
         return false;
     } else if (key == 13 && event.shiftKey) {
         // shift + return
@@ -219,7 +225,7 @@ function keyDown(event) {
         return true;
     }
     var table = getAutoCompleteTable();
-    if (table.rows.length > 0) {
+    if (table && table.rows.length > 0) {
         if (key == 27) {
             // escape
             while (table.rows.length > 0) {
