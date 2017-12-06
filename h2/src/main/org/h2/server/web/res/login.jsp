@@ -9,6 +9,22 @@ Initial Developer: H2 Group
     <meta name="viewport" content="width=device-width, initial-scale=0.9" />
     <title>${text.a.title}</title>
     <link rel="stylesheet" type="text/css" href="stylesheet.css" />
+    <style type="text/css">
+    .status-icon {
+        background: indianred;
+        fill: white;
+        border-radius: 3px;
+        padding: 5px 6px 5px;
+        margin: 0 4px;
+        border: 1px solid rgba(0,0,0,0.2);
+        display: inline-block;
+        vertical-align: middle;
+    }
+    .status-text {
+        display: inline-block;
+        vertical-align: middle;
+    }
+    </style>
     <script type="text/javascript">
         if (self.name == 'h2result' || self.name == 'h2query' || self.name == 'h2menu') {
             parent.location = "login.jsp";
@@ -87,6 +103,16 @@ Initial Developer: H2 Group
                 </td>
             </tr>
         </table>
+        <p>
+            <a class="status-icon" style="background:orange;">
+                <svg style="width:24px;height:24px;stroke-width: 100px;" viewBox="0 0 24 24">
+                    <path fill="#ffffff" d="M11,4.5H13V15.5H11V4.5M13,17.5V19.5H11V17.5H13Z" style="stroke-width: 100;"></path>
+                </svg>
+            </a>
+            <span class="status-text">
+                Por favor não mudar o <b>User Name</b> das conexões. Crie uma nova.
+            </span>
+        </p>
         <br />
         <div id="url" style="display: none">
             <h2>H2 Database URLs</h2>
