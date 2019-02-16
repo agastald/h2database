@@ -19,8 +19,15 @@ Initial Developer: H2 Group
                 </td>
                 <td class="toolbar">
                     <img src="icon_line.gif" class="iconLine" alt=""/>
+                    <a href="login.do?jsessionid=${sessionId}" target="_blank">
+                        <img src="icon_dup_window_24.png"
+                             onmouseover="this.className ='icon_hover'"
+                             onmouseout="this.className ='icon'"
+                             class="icon" alt="${text.a.newConnection}"
+                             title="${text.a.newConnection}" border="1"/>
+                    </a>
                     <a href="index.jsp" target="_blank">
-                        <img src="icon_new_window.png"
+                        <img src="icon_new_window_24.png"
                              onmouseover="this.className ='icon_hover'"
                              onmouseout="this.className ='icon'"
                              class="icon" alt="${text.a.newConnection}"
@@ -29,7 +36,7 @@ Initial Developer: H2 Group
                 </td>
                 <td class="toolbar">
                     <a href="logout.do?jsessionid=${sessionId}" target="_parent">
-                        <img src="icon_disconnect.gif"
+                        <img src="icon_logout_24.png"
                             onmouseover="this.className ='icon_hover'"
                             onmouseout="this.className ='icon'"
                             class="icon" alt="${text.toolbar.disconnect}"
