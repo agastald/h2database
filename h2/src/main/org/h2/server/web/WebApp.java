@@ -936,10 +936,10 @@ public class WebApp {
     }
 
     private String login() {
-        String driver = attributes.getProperty("driver", "");
-        String url = attributes.getProperty("url", "");
-        String user = attributes.getProperty("user", "");
-        String password = attributes.getProperty("password", "");
+        String driver = attributes.getProperty("driver", (String) session.get("driver"));
+        String url = attributes.getProperty("url", (String) session.get("url"));
+        String user = attributes.getProperty("user", (String) session.get("user"));
+        String password = attributes.getProperty("password", (String) session.get("password"));
         session.put("autoComplete", "1");
         session.put("maxrows", String.valueOf(SysProperties.MAX_ROWS));
         session.put("autoReconnect", SysProperties.CONSOLE_AUTO_RECONNECT ? "on" : "off");
@@ -947,15 +947,19 @@ public class WebApp {
         session.put("version", Constants.getFullVersion());
         boolean isH2 = url.startsWith("jdbc:h2:");
         try {
-            Connection conn = server.getConnection(driver, url, user, password);
-            session.setConnection(conn);
-            session.put("url", url);
-            session.put("user", user);
-            session.put("password", password);
-            session.put("autoCommit", conn.getAutoCommit() ? "checked" : "");
-            session.put("transactionIsolation", conn.getTransactionIsolation());
-            session.remove("error");
-            settingSave();
+            Connection conn = session.getConnection();
+            if (conn == null || conn.isClosed()) {
+                conn = server.getConnection(driver, url, user, password);
+                session.setConnection(conn);
+                session.put("driver", driver);
+                session.put("url", url);
+                session.put("user", user);
+                session.put("password", password);
+                session.put("autoCommit", conn.getAutoCommit() ? "checked" : "");
+                session.put("transactionIsolation", conn.getTransactionIsolation());
+                session.remove("error");
+                settingSave();
+            }
             return "frame.jsp";
         } catch (Exception e) {
             session.put("error", getLoginError(e, isH2));
@@ -1829,6 +1833,7 @@ public class WebApp {
         info.user = attributes.getProperty("user", "");
         server.updateSetting(info);
         attributes.put("setting", info.name);
+        session.put("setting", info.name);
         server.saveProperties(null);
         return "index.do";
     }
