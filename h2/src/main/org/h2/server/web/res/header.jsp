@@ -26,7 +26,7 @@ Initial Developer: H2 Group
                              class="icon" alt="${text.a.newConnection}"
                              title="${text.a.newConnection}" border="1"/>
                     </a>
-                    <a href="index.jsp" target="_blank">
+                    <a href="index2.jsp" target="_blank">
                         <img src="icon_new_window_24-4.png"
                              onmouseover="this.className ='icon_hover'"
                              onmouseout="this.className ='icon'"
