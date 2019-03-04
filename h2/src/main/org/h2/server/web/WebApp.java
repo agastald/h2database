@@ -153,6 +153,13 @@ public class WebApp {
                     file = "index.do";
                 }
             }
+            if ("help.jsp".equals(file)) {
+                if (session.get("query") != null) {
+                    attributes.put("sql", (String) session.get("query"));
+                    session.remove("query");
+                    file = "query.do";
+                }
+            }
         } else if ("js".equals(suffix)) {
             cache = true;
             mimeType = "text/javascript";
@@ -963,6 +970,9 @@ public class WebApp {
                 session.put("transactionIsolation", conn.getTransactionIsolation());
                 session.remove("error");
                 settingSave();
+                if (attributes.getProperty("initialQuery") != null) {
+                    session.put("query", attributes.getProperty("initialQuery"));
+                }
             }
             return "frame.jsp";
         } catch (Exception e) {
