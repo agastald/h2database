@@ -156,6 +156,10 @@ public class WebApp {
             if ("help.jsp".equals(file)) {
                 if (session.get("query") != null) {
                     attributes.put("sql", (String) session.get("query"));
+                    try {
+                        // gambiarra pra dar tempo do query.jsp printar a query
+                        Thread.sleep(250);
+                    } catch (InterruptedException ignored) {}
                     session.remove("query");
                     file = "query.do";
                 }
