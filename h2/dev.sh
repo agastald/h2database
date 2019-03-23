@@ -1,6 +1,6 @@
 #!/bin/sh
-dir=$(dirname "$0")
-cd $dir
+DIR=$(dirname "$0")
+cd $DIR/bin
 find ../temp -name data.zip -exec rm {} \;
 export JAVA_OPTS="-javaagent:$HOME/lib/jars/simple-proxy-selector-agent.jar -Doracle.net.tns_admin=$HOME/etc"
 export DEBUG_OPTS="-Xdebug -Xrunjdwp:server=y,transport=dt_socket,address=8000,suspend=n"
