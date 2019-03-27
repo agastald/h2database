@@ -1,6 +1,6 @@
 /*
- * Copyright 2004-2014 H2 Group. Multiple-Licensed under the MPL 2.0,
- * and the EPL 1.0 (http://h2database.com/html/license.html).
+ * Copyright 2004-2019 H2 Group. Multiple-Licensed under the MPL 2.0,
+ * and the EPL 1.0 (https://h2database.com/html/license.html).
  * Initial Developer: H2 Group
  */
 package org.h2.table;
@@ -29,6 +29,14 @@ public interface ColumnResolver {
      * @return the column list
      */
     Column[] getColumns();
+
+    /**
+     * Get derived column name, or {@code null}.
+     *
+     * @param column column
+     * @return derived column name, or {@code null}
+     */
+    String getDerivedColumnName(Column column);
 
     /**
      * Get the list of system columns, if any.

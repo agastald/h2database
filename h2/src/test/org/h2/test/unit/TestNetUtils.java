@@ -1,6 +1,6 @@
 /*
- * Copyright 2004-2014 H2 Group. Multiple-Licensed under the MPL 2.0,
- * and the EPL 1.0 (http://h2database.com/html/license.html).
+ * Copyright 2004-2019 H2 Group. Multiple-Licensed under the MPL 2.0,
+ * and the EPL 1.0 (https://h2database.com/html/license.html).
  * Initial Developer: Sergi Vladykin
  */
 package org.h2.test.unit;
@@ -11,12 +11,11 @@ import java.net.Socket;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
-
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLServerSocket;
 import javax.net.ssl.SSLSession;
 import javax.net.ssl.SSLSocket;
-
+import org.h2.build.BuildBase;
 import org.h2.engine.SysProperties;
 import org.h2.test.TestBase;
 import org.h2.util.NetUtils;
@@ -57,9 +56,12 @@ public class TestNetUtils extends TestBase {
      * With default settings, H2 client SSL socket should be able to connect
      * to an H2 server SSL socket using an anonymous cipher suite
      * (no SSL certificate is needed).
-     * @throws Exception
      */
     private void testAnonymousTlsSession() throws Exception {
+        if (BuildBase.getJavaVersion() >= 11) {
+            // Issue #1303
+            return;
+        }
         assertTrue("Failed assumption: the default value of ENABLE_ANONYMOUS_TLS" +
                 " property should be true", SysProperties.ENABLE_ANONYMOUS_TLS);
         boolean ssl = true;
@@ -98,7 +100,6 @@ public class TestNetUtils extends TestBase {
      * does not allow anonymous TLS.
      * The global property ENABLE_ANONYMOUS_TLS cannot be modified for the test;
      * instead, the server socket is altered.
-     * @throws Exception
      */
     private void testTlsSessionWithServerSideAnonymousDisabled() throws Exception {
         boolean ssl = true;
@@ -129,7 +130,7 @@ public class TestNetUtils extends TestBase {
             closeSilently(socket);
             closeSilently(serverSocket);
             if (task != null) {
-                assertTrue(task.getException() != null);
+                assertNotNull(task.getException());
                 assertEquals(javax.net.ssl.SSLHandshakeException.class.getName(),
                         task.getException().getClass().getName());
                 assertContains(task.getException().getMessage(), "certificate_unknown");
@@ -140,7 +141,7 @@ public class TestNetUtils extends TestBase {
 
     private Task createServerSocketTask(final ServerSocket serverSocket) {
         Task task = new Task() {
-            
+
             @Override
             public void call() throws Exception {
                 Socket ss = null;
@@ -148,14 +149,34 @@ public class TestNetUtils extends TestBase {
                     ss = serverSocket.accept();
                     ss.getOutputStream().write(123);
                 } finally {
-                   closeSilently(ss);
+                    closeSilently(ss);
                 }
             }
         };
         return task;
     }
 
-    private void closeSilently(Socket socket) {
+    /**
+     * Close a socket, ignoring errors
+     *
+     * @param socket the socket
+     */
+    void closeSilently(Socket socket) {
+        try {
+            if (socket != null) {
+                socket.close();
+            }
+        } catch (Exception e) {
+            // ignore
+        }
+    }
+
+    /**
+     * Close a server socket, ignoring errors
+     *
+     * @param socket the server socket
+     */
+    void closeSilently(ServerSocket socket) {
         try {
             socket.close();
         } catch (Exception e) {
@@ -163,15 +184,7 @@ public class TestNetUtils extends TestBase {
         }
     }
 
-    private void closeSilently(ServerSocket socket) {
-        try {
-            socket.close();
-        } catch (Exception e) {
-            // ignore
-        }
-    }
-
-    private void testFrequentConnections(boolean ssl, int count) throws Exception {
+    private static void testFrequentConnections(boolean ssl, int count) throws Exception {
         final ServerSocket serverSocket = NetUtils.createServerSocket(PORT, ssl);
         final AtomicInteger counter = new AtomicInteger(count);
         Task serverThread = new Task() {
@@ -192,7 +205,7 @@ public class TestNetUtils extends TestBase {
         };
         serverThread.execute();
         try {
-            Set<ConnectWorker> workers = new HashSet<ConnectWorker>();
+            Set<ConnectWorker> workers = new HashSet<>();
             for (int i = 0; i < WORKER_COUNT; i++) {
                 workers.add(new ConnectWorker(ssl, counter));
             }

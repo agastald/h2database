@@ -1,6 +1,6 @@
 /*
- * Copyright 2004-2014 H2 Group. Multiple-Licensed under the MPL 2.0,
- * and the EPL 1.0 (http://h2database.com/html/license.html).
+ * Copyright 2004-2019 H2 Group. Multiple-Licensed under the MPL 2.0,
+ * and the EPL 1.0 (https://h2database.com/html/license.html).
  * Initial Developer: H2 Group
  */
 package org.h2.expression;
@@ -13,9 +13,10 @@ import org.h2.message.DbException;
 import org.h2.result.ResultInterface;
 import org.h2.table.ColumnResolver;
 import org.h2.table.TableFilter;
+import org.h2.value.TypeInfo;
 import org.h2.value.Value;
-import org.h2.value.ValueArray;
 import org.h2.value.ValueNull;
+import org.h2.value.ValueRow;
 
 /**
  * A query returning a single value.
@@ -33,37 +34,32 @@ public class Subquery extends Expression {
     @Override
     public Value getValue(Session session) {
         query.setSession(session);
-        ResultInterface result = query.query(2);
-        try {
-            int rowcount = result.getRowCount();
-            if (rowcount > 1) {
-                throw DbException.get(ErrorCode.SCALAR_SUBQUERY_CONTAINS_MORE_THAN_ONE_ROW);
-            }
+        try (ResultInterface result = query.query(2)) {
             Value v;
-            if (rowcount <= 0) {
+            if (!result.next()) {
                 v = ValueNull.INSTANCE;
             } else {
-                result.next();
                 Value[] values = result.currentRow();
                 if (result.getVisibleColumnCount() == 1) {
                     v = values[0];
                 } else {
-                    v = ValueArray.get(values);
+                    v = ValueRow.get(values);
+                }
+                if (result.hasNext()) {
+                    throw DbException.get(ErrorCode.SCALAR_SUBQUERY_CONTAINS_MORE_THAN_ONE_ROW);
                 }
             }
             return v;
-        } finally {
-            result.close();
         }
     }
 
     @Override
-    public int getType() {
+    public TypeInfo getType() {
         return getExpression().getType();
     }
 
     @Override
-    public void mapColumns(ColumnResolver resolver, int level) {
+    public void mapColumns(ColumnResolver resolver, int level, int state) {
         query.mapColumns(resolver, level + 1);
     }
 
@@ -79,28 +75,13 @@ public class Subquery extends Expression {
     }
 
     @Override
-    public int getScale() {
-        return getExpression().getScale();
+    public StringBuilder getSQL(StringBuilder builder, boolean alwaysQuote) {
+        return builder.append('(').append(query.getPlanSQL(alwaysQuote)).append(')');
     }
 
     @Override
-    public long getPrecision() {
-        return getExpression().getPrecision();
-    }
-
-    @Override
-    public int getDisplaySize() {
-        return getExpression().getDisplaySize();
-    }
-
-    @Override
-    public String getSQL() {
-        return "(" + query.getPlanSQL() + ")";
-    }
-
-    @Override
-    public void updateAggregate(Session session) {
-        query.updateAggregate(session);
+    public void updateAggregate(Session session, int stage) {
+        query.updateAggregate(session, stage);
     }
 
     private Expression getExpression() {
@@ -114,7 +95,7 @@ public class Subquery extends Expression {
                 for (int i = 0; i < columnCount; i++) {
                     list[i] = expressions.get(i);
                 }
-                expression = new ExpressionList(list);
+                expression = new ExpressionList(list, false);
             }
         }
         return expression;

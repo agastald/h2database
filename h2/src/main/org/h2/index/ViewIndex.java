@@ -1,23 +1,26 @@
 /*
- * Copyright 2004-2014 H2 Group. Multiple-Licensed under the MPL 2.0,
- * and the EPL 1.0 (http://h2database.com/html/license.html).
+ * Copyright 2004-2019 H2 Group. Multiple-Licensed under the MPL 2.0,
+ * and the EPL 1.0 (https://h2database.com/html/license.html).
  * Initial Developer: H2 Group
  */
 package org.h2.index;
 
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.concurrent.TimeUnit;
+
 import org.h2.api.ErrorCode;
+import org.h2.command.Parser;
 import org.h2.command.Prepared;
+import org.h2.command.dml.AllColumnsForPlan;
 import org.h2.command.dml.Query;
 import org.h2.command.dml.SelectUnion;
 import org.h2.engine.Constants;
 import org.h2.engine.Session;
-import org.h2.expression.Comparison;
 import org.h2.expression.Parameter;
+import org.h2.expression.condition.Comparison;
 import org.h2.message.DbException;
 import org.h2.result.LocalResult;
+import org.h2.result.ResultInterface;
 import org.h2.result.Row;
 import org.h2.result.SearchRow;
 import org.h2.result.SortOrder;
@@ -27,7 +30,6 @@ import org.h2.table.JoinBatch;
 import org.h2.table.TableFilter;
 import org.h2.table.TableView;
 import org.h2.util.IntArray;
-import org.h2.util.New;
 import org.h2.value.Value;
 
 /**
@@ -62,7 +64,7 @@ public class ViewIndex extends BaseIndex implements SpatialIndex {
      */
     public ViewIndex(TableView view, String querySQL,
             ArrayList<Parameter> originalParameters, boolean recursive) {
-        initBaseIndex(view, 0, null, null, IndexType.createNonUnique(false));
+        super(view, 0, null, null, IndexType.createNonUnique(false));
         this.view = view;
         this.querySQL = querySQL;
         this.originalParameters = originalParameters;
@@ -89,7 +91,7 @@ public class ViewIndex extends BaseIndex implements SpatialIndex {
      */
     public ViewIndex(TableView view, ViewIndex index, Session session,
             int[] masks, TableFilter[] filters, int filter, SortOrder sortOrder) {
-        initBaseIndex(view, 0, null, null, IndexType.createNonUnique(false));
+        super(view, 0, null, null, IndexType.createNonUnique(false));
         this.view = view;
         this.querySQL = index.querySQL;
         this.originalParameters = index.originalParameters;
@@ -108,7 +110,7 @@ public class ViewIndex extends BaseIndex implements SpatialIndex {
     }
 
     @Override
-    public IndexLookupBatch createLookupBatch(TableFilter filter) {
+    public IndexLookupBatch createLookupBatch(TableFilter[] filters, int filter) {
         if (recursive) {
             // we do not support batching for recursive queries
             return null;
@@ -128,7 +130,7 @@ public class ViewIndex extends BaseIndex implements SpatialIndex {
 
     @Override
     public String getPlanSQL() {
-        return query == null ? null : query.getPlanSQL();
+        return query == null ? null : query.getPlanSQL(false);
     }
 
     @Override
@@ -149,7 +151,7 @@ public class ViewIndex extends BaseIndex implements SpatialIndex {
     @Override
     public double getCost(Session session, int[] masks,
             TableFilter[] filters, int filter, SortOrder sortOrder,
-            HashSet<Column> allColumnsSet) {
+            AllColumnsForPlan allColumnsSet) {
         return recursive ? 1000 : query.getCost();
     }
 
@@ -159,17 +161,17 @@ public class ViewIndex extends BaseIndex implements SpatialIndex {
     }
 
     @Override
-    public Cursor findByGeometry(TableFilter filter, SearchRow intersection) {
-        return find(filter.getSession(), null, null, intersection);
+    public Cursor findByGeometry(TableFilter filter, SearchRow first,
+            SearchRow last, SearchRow intersection) {
+        return find(filter.getSession(), first, last, intersection);
     }
 
     private static Query prepareSubQuery(String sql, Session session, int[] masks,
             TableFilter[] filters, int filter, SortOrder sortOrder) {
-        assert filters != null;
         Prepared p;
         session.pushSubQueryInfo(masks, filters, filter, sortOrder);
         try {
-            p = session.prepare(sql, true);
+            p = session.prepare(sql, true, true);
         } finally {
             session.popSubQueryInfo();
         }
@@ -178,53 +180,57 @@ public class ViewIndex extends BaseIndex implements SpatialIndex {
 
     private Cursor findRecursive(SearchRow first, SearchRow last) {
         assert recursive;
-        LocalResult recResult = view.getRecursiveResult();
-        if (recResult != null) {
-            recResult.reset();
-            return new ViewCursor(this, recResult, first, last);
+        ResultInterface recursiveResult = view.getRecursiveResult();
+        if (recursiveResult != null) {
+            recursiveResult.reset();
+            return new ViewCursor(this, recursiveResult, first, last);
         }
         if (query == null) {
-            query = (Query) createSession.prepare(querySQL, true);
+            Parser parser = new Parser(createSession);
+            parser.setRightsChecked(true);
+            parser.setSuppliedParameterList(originalParameters);
+            query = (Query) parser.prepare(querySQL);
+            query.setNeverLazy(true);
         }
         if (!query.isUnion()) {
             throw DbException.get(ErrorCode.SYNTAX_ERROR_2,
-                    "recursive queries without UNION ALL");
+                    "recursive queries without UNION");
         }
         SelectUnion union = (SelectUnion) query;
-        if (union.getUnionType() != SelectUnion.UNION_ALL) {
-            throw DbException.get(ErrorCode.SYNTAX_ERROR_2,
-                    "recursive queries without UNION ALL");
-        }
         Query left = union.getLeft();
+        left.setNeverLazy(true);
         // to ensure the last result is not closed
         left.disableCache();
-        LocalResult r = left.query(0);
-        LocalResult result = union.getEmptyResult();
+        ResultInterface resultInterface = left.query(0);
+        LocalResult localResult = union.getEmptyResult();
         // ensure it is not written to disk,
         // because it is not closed normally
-        result.setMaxMemoryRows(Integer.MAX_VALUE);
-        while (r.next()) {
-            result.addRow(r.currentRow());
+        localResult.setMaxMemoryRows(Integer.MAX_VALUE);
+        while (resultInterface.next()) {
+            Value[] cr = resultInterface.currentRow();
+            localResult.addRow(cr);
         }
         Query right = union.getRight();
-        r.reset();
-        view.setRecursiveResult(r);
+        right.setNeverLazy(true);
+        resultInterface.reset();
+        view.setRecursiveResult(resultInterface);
         // to ensure the last result is not closed
         right.disableCache();
         while (true) {
-            r = right.query(0);
-            if (r.getRowCount() == 0) {
+            resultInterface = right.query(0);
+            if (!resultInterface.hasNext()) {
                 break;
             }
-            while (r.next()) {
-                result.addRow(r.currentRow());
+            while (resultInterface.next()) {
+                Value[] cr = resultInterface.currentRow();
+                localResult.addRow(cr);
             }
-            r.reset();
-            view.setRecursiveResult(r);
+            resultInterface.reset();
+            view.setRecursiveResult(resultInterface);
         }
         view.setRecursiveResult(null);
-        result.done();
-        return new ViewCursor(this, result, first, last);
+        localResult.done();
+        return new ViewCursor(this, localResult, first, last);
     }
 
     /**
@@ -239,8 +245,7 @@ public class ViewIndex extends BaseIndex implements SpatialIndex {
             SearchRow intersection) {
         ArrayList<Parameter> paramList = query.getParameters();
         if (originalParameters != null) {
-            for (int i = 0, size = originalParameters.size(); i < size; i++) {
-                Parameter orig = originalParameters.get(i);
+            for (Parameter orig : originalParameters) {
                 int idx = orig.getIndex();
                 Value value = orig.getValue(session);
                 setParameter(paramList, idx, value);
@@ -256,8 +261,7 @@ public class ViewIndex extends BaseIndex implements SpatialIndex {
         } else {
             len = 0;
         }
-        int idx = originalParameters == null ? 0 : originalParameters.size();
-        idx += view.getParameterOffset();
+        int idx = view.getParameterOffset(originalParameters);
         for (int i = 0; i < len; i++) {
             int mask = indexMasks[i];
             if ((mask & IndexCondition.EQUALITY) != 0) {
@@ -281,7 +285,7 @@ public class ViewIndex extends BaseIndex implements SpatialIndex {
             return findRecursive(first, last);
         }
         setupQueryParameters(session, first, last, intersection);
-        LocalResult result = query.query(0);
+        ResultInterface result = query.query(0);
         return new ViewCursor(this, result, first, last);
     }
 
@@ -309,10 +313,11 @@ public class ViewIndex extends BaseIndex implements SpatialIndex {
         if (!q.allowGlobalConditions()) {
             return q;
         }
-        int firstIndexParam = originalParameters == null ?
-                0 : originalParameters.size();
-        firstIndexParam += view.getParameterOffset();
-        IntArray paramIndex = new IntArray();
+        int firstIndexParam = view.getParameterOffset(originalParameters);
+        // the column index of each parameter
+        // (for example: paramColumnIndex {0, 0} mean
+        // param[0] is column 0, and param[1] is also column 0)
+        IntArray paramColumnIndex = new IntArray();
         int indexColumnCount = 0;
         for (int i = 0; i < masks.length; i++) {
             int mask = masks[i];
@@ -320,16 +325,18 @@ public class ViewIndex extends BaseIndex implements SpatialIndex {
                 continue;
             }
             indexColumnCount++;
-            paramIndex.add(i);
-            if (Integer.bitCount(mask) > 1) {
-                // two parameters for range queries: >= x AND <= y
-                paramIndex.add(i);
+            // the number of parameters depends on the mask;
+            // for range queries it is 2: >= x AND <= y
+            // but bitMask could also be 7 (=, and <=, and >=)
+            int bitCount = Integer.bitCount(mask);
+            for (int j = 0; j < bitCount; j++) {
+                paramColumnIndex.add(i);
             }
         }
-        int len = paramIndex.size();
-        ArrayList<Column> columnList = New.arrayList();
+        int len = paramColumnIndex.size();
+        ArrayList<Column> columnList = new ArrayList<>(len);
         for (int i = 0; i < len;) {
-            int idx = paramIndex.get(i);
+            int idx = paramColumnIndex.get(i);
             columnList.add(table.getColumn(idx));
             int mask = masks[idx];
             if ((mask & IndexCondition.EQUALITY) != 0) {
@@ -353,8 +360,7 @@ public class ViewIndex extends BaseIndex implements SpatialIndex {
                 i++;
             }
         }
-        columns = new Column[columnList.size()];
-        columnList.toArray(columns);
+        columns = columnList.toArray(new Column[0]);
 
         // reconstruct the index columns from the masks
         this.indexColumns = new IndexColumn[indexColumnCount];
@@ -384,7 +390,7 @@ public class ViewIndex extends BaseIndex implements SpatialIndex {
             }
         }
 
-        String sql = q.getPlanSQL();
+        String sql = q.getPlanSQL(true);
         q = prepareSubQuery(sql, session, masks, filters, filter, sortOrder);
         return q;
     }

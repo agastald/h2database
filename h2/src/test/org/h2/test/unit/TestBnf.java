@@ -1,27 +1,27 @@
 /*
- * Copyright 2004-2014 H2 Group. Multiple-Licensed under the MPL 2.0,
- * and the EPL 1.0 (http://h2database.com/html/license.html).
+ * Copyright 2004-2019 H2 Group. Multiple-Licensed under the MPL 2.0,
+ * and the EPL 1.0 (https://h2database.com/html/license.html).
  * Initial Developer: H2 Group
  */
 package org.h2.test.unit;
 
+import java.sql.Connection;
+import java.util.HashSet;
+import java.util.Map;
+import java.util.Set;
 import org.h2.bnf.Bnf;
 import org.h2.bnf.context.DbContents;
 import org.h2.bnf.context.DbContextRule;
 import org.h2.bnf.context.DbProcedure;
 import org.h2.bnf.context.DbSchema;
 import org.h2.test.TestBase;
-
-import java.sql.Connection;
-import java.util.HashSet;
-import java.util.Map;
-import java.util.Set;
+import org.h2.test.TestDb;
 
 /**
  * Test Bnf Sql parser
  * @author Nicolas Fortin
  */
-public class TestBnf extends TestBase {
+public class TestBnf extends TestDb {
 
     /**
      * Run just this test.
@@ -35,18 +35,13 @@ public class TestBnf extends TestBase {
     @Override
     public void test() throws Exception {
         deleteDb("bnf");
-        Connection conn = getConnection("bnf");
-        try {
+        try (Connection conn = getConnection("bnf")) {
             testModes(conn);
             testProcedures(conn, false);
-        } finally {
-            conn.close();
         }
-        conn = getConnection("bnf;mode=mysql");
-        try {
+        deleteDb("bnf");
+        try (Connection conn = getConnection("bnf;mode=mysql;database_to_lower=true")) {
             testProcedures(conn, true);
-        } finally {
-            conn.close();
         }
     }
 
@@ -99,12 +94,10 @@ public class TestBnf extends TestBase {
         assertFalse(dbContents.isFirebird());
         assertEquals(null, dbContents.quoteIdentifier(null));
         if (isMySQLMode) {
-            assertTrue(dbContents.isH2ModeMySQL());
-            assertEquals("TEST", dbContents.quoteIdentifier("TEST"));
-            assertEquals("TEST", dbContents.quoteIdentifier("Test"));
-            assertEquals("TEST", dbContents.quoteIdentifier("test"));
+            assertEquals("\"TEST\"", dbContents.quoteIdentifier("TEST"));
+            assertEquals("\"Test\"", dbContents.quoteIdentifier("Test"));
+            assertEquals("test", dbContents.quoteIdentifier("test"));
         } else {
-            assertFalse(dbContents.isH2ModeMySQL());
             assertEquals("TEST", dbContents.quoteIdentifier("TEST"));
             assertEquals("\"Test\"", dbContents.quoteIdentifier("Test"));
             assertEquals("\"test\"", dbContents.quoteIdentifier("test"));
@@ -116,7 +109,7 @@ public class TestBnf extends TestBase {
         assertFalse(dbContents.isSQLite());
         DbSchema defaultSchema = dbContents.getDefaultSchema();
         DbProcedure[] procedures = defaultSchema.getProcedures();
-        Set<String> procedureName = new HashSet<String>(procedures.length);
+        Set<String> procedureName = new HashSet<>(procedures.length);
         for (DbProcedure procedure : procedures) {
             assertTrue(defaultSchema == procedure.getSchema());
             procedureName.add(procedure.getName());

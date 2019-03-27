@@ -1,12 +1,11 @@
 /*
- * Copyright 2004-2014 H2 Group. Multiple-Licensed under the MPL 2.0,
- * and the EPL 1.0 (http://h2database.com/html/license.html).
+ * Copyright 2004-2019 H2 Group. Multiple-Licensed under the MPL 2.0,
+ * and the EPL 1.0 (https://h2database.com/html/license.html).
  * Initial Developer: H2 Group
  */
 package org.h2.table;
 
 import java.util.ArrayList;
-
 import org.h2.api.ErrorCode;
 import org.h2.engine.Session;
 import org.h2.expression.Expression;
@@ -20,7 +19,7 @@ import org.h2.value.Value;
 
 /**
  * The table SYSTEM_RANGE is a virtual table that generates incrementing numbers
- * with a given start end end point.
+ * with a given start end point.
  */
 public class RangeTable extends Table {
 
@@ -72,12 +71,15 @@ public class RangeTable extends Table {
     }
 
     @Override
-    public String getSQL() {
-        String sql = NAME + "(" + min.getSQL() + ", " + max.getSQL();
+    public StringBuilder getSQL(StringBuilder builder, boolean alwaysQuote) {
+        builder.append(NAME).append('(');
+        min.getSQL(builder, alwaysQuote).append(", ");
+        max.getSQL(builder, alwaysQuote);
         if (step != null) {
-            sql += ", " + step.getSQL();
+            builder.append(", ");
+            step.getSQL(builder, alwaysQuote);
         }
-        return sql + ")";
+        return builder.append(')');
     }
 
     @Override
@@ -140,12 +142,24 @@ public class RangeTable extends Table {
 
     @Override
     public long getRowCount(Session session) {
-        return Math.max(0, getMax(session) - getMin(session) + 1);
+        long step = getStep(session);
+        if (step == 0L) {
+            throw DbException.get(ErrorCode.STEP_SIZE_MUST_NOT_BE_ZERO);
+        }
+        long delta = getMax(session) - getMin(session);
+        if (step > 0) {
+            if (delta < 0) {
+                return 0;
+            }
+        } else if (delta > 0) {
+            return 0;
+        }
+        return delta / step + 1;
     }
 
     @Override
-    public String getTableType() {
-        throw DbException.throwInternalError();
+    public TableType getTableType() {
+        return TableType.SYSTEM_TABLE;
     }
 
     @Override

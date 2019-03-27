@@ -1,17 +1,15 @@
 /*
- * Copyright 2004-2014 H2 Group. Multiple-Licensed under the MPL 2.0,
- * and the EPL 1.0 (http://h2database.com/html/license.html).
+ * Copyright 2004-2019 H2 Group. Multiple-Licensed under the MPL 2.0,
+ * and the EPL 1.0 (https://h2database.com/html/license.html).
  * Initial Developer: H2 Group
  */
 package org.h2.index;
 
 import java.lang.ref.SoftReference;
 import java.util.Arrays;
-
 import org.h2.api.ErrorCode;
 import org.h2.engine.Constants;
 import org.h2.engine.Session;
-import org.h2.engine.SysProperties;
 import org.h2.message.DbException;
 import org.h2.result.Row;
 import org.h2.store.Data;
@@ -154,7 +152,7 @@ public class PageDataLeaf extends PageData {
     private int findInsertionPoint(long key) {
         int x = find(key);
         if (x < entryCount && keys[x] == key) {
-            throw index.getDuplicateKeyException(""+key);
+            throw index.getDuplicateKeyException(String.valueOf(key));
         }
         return x;
     }
@@ -221,7 +219,7 @@ public class PageDataLeaf extends PageData {
         if (offset < start) {
             writtenData = false;
             if (entryCount > 1) {
-                DbException.throwInternalError();
+                DbException.throwInternalError(Integer.toString(entryCount));
             }
             // need to write the overflow page id
             start += 4;
@@ -237,7 +235,7 @@ public class PageDataLeaf extends PageData {
             writeData();
             // free up the space used by the row
             Row r = rows[0];
-            rowRef = new SoftReference<Row>(r);
+            rowRef = new SoftReference<>(r);
             rows[0] = null;
             Data all = index.getPageStore().createData();
             all.checkCapacity(data.length());
@@ -284,7 +282,7 @@ public class PageDataLeaf extends PageData {
         }
         entryCount--;
         if (entryCount < 0) {
-            DbException.throwInternalError();
+            DbException.throwInternalError(Integer.toString(entryCount));
         }
         if (firstOverflowPageId != 0) {
             start -= 4;
@@ -316,9 +314,9 @@ public class PageDataLeaf extends PageData {
     }
 
     @Override
-    Cursor find(Session session, long minKey, long maxKey, boolean multiVersion) {
+    Cursor find(Session session, long minKey, long maxKey) {
         int x = find(minKey);
-        return new PageDataCursor(session, this, x, maxKey, multiVersion);
+        return new PageDataCursor(this, x, maxKey);
     }
 
     /**
@@ -354,7 +352,7 @@ public class PageDataLeaf extends PageData {
             }
             r.setKey(keys[at]);
             if (firstOverflowPageId != 0) {
-                rowRef = new SoftReference<Row>(r);
+                rowRef = new SoftReference<>(r);
             } else {
                 rows[at] = r;
                 memoryChange(true, r);
@@ -371,7 +369,7 @@ public class PageDataLeaf extends PageData {
     PageData split(int splitPoint) {
         int newPageId = index.getPageStore().allocatePage();
         PageDataLeaf p2 = PageDataLeaf.create(index, newPageId, parentPageId);
-        for (int i = splitPoint; i < entryCount;) {
+        while (splitPoint < entryCount) {
             int split = p2.addRowTry(getRowAt(splitPoint));
             if (split != -1) {
                 DbException.throwInternalError("split " + split);
@@ -418,7 +416,8 @@ public class PageDataLeaf extends PageData {
         int i = find(key);
         if (keys == null || keys[i] != key) {
             throw DbException.get(ErrorCode.ROW_NOT_FOUND_WHEN_DELETING_1,
-                    index.getSQL() + ": " + key + " " + (keys == null ? -1 : keys[i]));
+                    index.getSQL(new StringBuilder(), false).append(": ").append(key).append(' ')
+                    .append(keys == null ? -1 : keys[i]).toString());
         }
         index.getPageStore().logUndo(this, data);
         if (entryCount == 1) {
@@ -492,11 +491,7 @@ public class PageDataLeaf extends PageData {
         }
         data.writeByte((byte) type);
         data.writeShortInt(0);
-        if (SysProperties.CHECK2) {
-            if (data.length() != START_PARENT) {
-                DbException.throwInternalError();
-            }
-        }
+        assert data.length() == START_PARENT;
         data.writeInt(parentPageId);
         data.writeVarInt(index.getId());
         data.writeVarInt(columnCount);
@@ -583,7 +578,7 @@ public class PageDataLeaf extends PageData {
      * @param overflow the new overflow page id
      */
     void setOverflow(int old, int overflow) {
-        if (SysProperties.CHECK && old != firstOverflowPageId) {
+        if (old != firstOverflowPageId) {
             DbException.throwInternalError("move " + this + " " + firstOverflowPageId);
         }
         index.getPageStore().logUndo(this, data);

@@ -1,20 +1,15 @@
 /*
- * Copyright 2004-2014 H2 Group. Multiple-Licensed under the MPL 2.0,
- * and the EPL 1.0 (http://h2database.com/html/license.html).
+ * Copyright 2004-2019 H2 Group. Multiple-Licensed under the MPL 2.0,
+ * and the EPL 1.0 (https://h2database.com/html/license.html).
  * Initial Developer: H2 Group
  */
 package org.h2.index;
 
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.List;
 import org.h2.api.ErrorCode;
+import org.h2.command.dml.AllColumnsForPlan;
 import org.h2.engine.Constants;
 import org.h2.engine.Session;
 import org.h2.engine.SysProperties;
-import org.h2.engine.UndoLogRecord;
 import org.h2.message.DbException;
 import org.h2.result.Row;
 import org.h2.result.SearchRow;
@@ -23,10 +18,9 @@ import org.h2.store.Page;
 import org.h2.store.PageStore;
 import org.h2.table.Column;
 import org.h2.table.IndexColumn;
-import org.h2.table.RegularTable;
+import org.h2.table.PageStoreTable;
 import org.h2.table.TableFilter;
 import org.h2.util.MathUtils;
-import org.h2.util.New;
 import org.h2.value.Value;
 import org.h2.value.ValueNull;
 
@@ -38,12 +32,9 @@ import org.h2.value.ValueNull;
 public class PageDataIndex extends PageIndex {
 
     private final PageStore store;
-    private final RegularTable tableData;
+    private final PageStoreTable tableData;
     private long lastKey;
     private long rowCount;
-    private HashSet<Row> delta;
-    private int rowCountDiff;
-    private final HashMap<Integer, Integer> sessionRowCount;
     private int mainIndexColumn = -1;
     private DbException fastDuplicateKeyException;
 
@@ -54,21 +45,12 @@ public class PageDataIndex extends PageIndex {
     private int memoryPerPage;
     private int memoryCount;
 
-    private final boolean multiVersion;
-
-    public PageDataIndex(RegularTable table, int id, IndexColumn[] columns,
+    public PageDataIndex(PageStoreTable table, int id, IndexColumn[] columns,
             IndexType indexType, boolean create, Session session) {
-        initBaseIndex(table, id, table.getName() + "_DATA", columns, indexType);
-        this.multiVersion = database.isMultiVersion();
+        super(table, id, table.getName() + "_DATA", columns, indexType);
 
         // trace = database.getTrace(Trace.PAGE_STORE + "_di");
         // trace.setLevel(TraceSystem.DEBUG);
-        if (multiVersion) {
-            sessionRowCount = New.hashMap();
-            isMultiVersion = true;
-        } else {
-            sessionRowCount = null;
-        }
         tableData = table;
         this.store = database.getPageStore();
         store.addIndex(this);
@@ -144,7 +126,7 @@ public class PageDataIndex extends PageIndex {
                 if (add == 0) {
                     // in the first re-try add a small random number,
                     // to avoid collisions after a re-start
-                    row.setKey((long) (row.getKey() + Math.random() * 10000));
+                    row.setKey((long) (row.getKey() + Math.random() * 10_000));
                 } else {
                     row.setKey(row.getKey() + add);
                 }
@@ -157,11 +139,13 @@ public class PageDataIndex extends PageIndex {
     }
 
     public DbException getNewDuplicateKeyException() {
-        String sql = "PRIMARY KEY ON " + table.getSQL();
+        StringBuilder builder = new StringBuilder("PRIMARY KEY ON ");
+        table.getSQL(builder, false);
         if (mainIndexColumn >= 0 && mainIndexColumn < indexColumns.length) {
-            sql +=  "(" + indexColumns[mainIndexColumn].getSQL() + ")";
+            builder.append('(');
+            indexColumns[mainIndexColumn].getSQL(builder, false).append(')');
         }
-        DbException e = DbException.get(ErrorCode.DUPLICATE_KEY_1, sql);
+        DbException e = DbException.get(ErrorCode.DUPLICATE_KEY_1, builder.toString());
         e.setSource(this);
         return e;
     }
@@ -191,23 +175,13 @@ public class PageDataIndex extends PageIndex {
             root = newRoot;
         }
         row.setDeleted(false);
-        if (multiVersion) {
-            if (delta == null) {
-                delta = New.hashSet();
-            }
-            boolean wasDeleted = delta.remove(row);
-            if (!wasDeleted) {
-                delta.add(row);
-            }
-            incrementRowCount(session.getId(), 1);
-        }
         invalidateRowCount();
         rowCount++;
         store.logAddOrRemoveRow(session, tableData.getId(), row, true);
     }
 
     /**
-     * Read an overflow page page.
+     * Read an overflow page.
      *
      * @param id the page id
      * @return the page
@@ -237,7 +211,7 @@ public class PageDataIndex extends PageIndex {
             store.update(empty);
             return empty;
         } else if (!(pd instanceof PageData)) {
-            throw DbException.get(ErrorCode.FILE_CORRUPTED_1, "" + pd);
+            throw DbException.get(ErrorCode.FILE_CORRUPTED_1, String.valueOf(pd));
         }
         PageData p = (PageData) pd;
         if (parent != -1) {
@@ -268,7 +242,7 @@ public class PageDataIndex extends PageIndex {
         }
         Value v = row.getValue(mainIndexColumn);
         if (v == null) {
-            throw DbException.throwInternalError(row.toString());
+            return row.getKey();
         } else if (v == ValueNull.INSTANCE) {
             return ifNull;
         }
@@ -280,7 +254,7 @@ public class PageDataIndex extends PageIndex {
         long from = first == null ? Long.MIN_VALUE : first.getKey();
         long to = last == null ? Long.MAX_VALUE : last.getKey();
         PageData root = getPage(rootPageId, 0);
-        return root.find(session, from, to, isMultiVersion);
+        return root.find(session, from, to);
 
     }
 
@@ -290,17 +264,16 @@ public class PageDataIndex extends PageIndex {
      * @param session the session
      * @param first the key of the first row
      * @param last the key of the last row
-     * @param multiVersion if mvcc should be used
      * @return the cursor
      */
-    Cursor find(Session session, long first, long last, boolean multiVersion) {
+    Cursor find(Session session, long first, long last) {
         PageData root = getPage(rootPageId, 0);
-        return root.find(session, first, last, multiVersion);
+        return root.find(session, first, last);
     }
 
     @Override
     public Cursor findFirstOrLast(Session session, boolean first) {
-        throw DbException.throwInternalError();
+        throw DbException.throwInternalError(toString());
     }
 
     long getLastKey() {
@@ -311,10 +284,13 @@ public class PageDataIndex extends PageIndex {
     @Override
     public double getCost(Session session, int[] masks,
             TableFilter[] filters, int filter, SortOrder sortOrder,
-            HashSet<Column> allColumnsSet) {
-        long cost = 10 * (tableData.getRowCountApproximation() +
-                Constants.COST_ROW_OFFSET);
-        return cost;
+            AllColumnsForPlan allColumnsSet) {
+        // The +200 is so that indexes that can return the same data, but have less
+        // columns, will take precedence. This all works out easier in the MVStore case,
+        // because MVStore uses the same cost calculation code for the ScanIndex (i.e.
+        // the MVPrimaryIndex) and all other indices.
+        return 10 * (tableData.getRowCountApproximation() +
+                Constants.COST_ROW_OFFSET) + 200;
     }
 
     @Override
@@ -328,7 +304,7 @@ public class PageDataIndex extends PageIndex {
             for (int i = 0, len = row.getColumnCount(); i < len; i++) {
                 Value v = row.getValue(i);
                 if (v.isLinkedToTable()) {
-                    session.removeAtCommitStop(v);
+                    session.removeAtCommit(v);
                 }
             }
         }
@@ -347,18 +323,6 @@ public class PageDataIndex extends PageIndex {
             } finally {
                 store.incrementChangeCount();
             }
-        }
-        if (multiVersion) {
-            // if storage is null, the delete flag is not yet set
-            row.setDeleted(true);
-            if (delta == null) {
-                delta = New.hashSet();
-            }
-            boolean wasAdded = delta.remove(row);
-            if (!wasAdded) {
-                delta.add(row);
-            }
-            incrementRowCount(session.getId(), -1);
         }
         store.logAddOrRemoveRow(session, tableData.getId(), row, false);
     }
@@ -384,9 +348,6 @@ public class PageDataIndex extends PageIndex {
             // unfortunately, the data is gone on rollback
             session.commit(false);
             database.getLobStorage().removeAllForTable(table.getId());
-        }
-        if (multiVersion) {
-            sessionRowCount.clear();
         }
         tableData.setRowCount(0);
     }
@@ -437,13 +398,6 @@ public class PageDataIndex extends PageIndex {
 
     @Override
     public long getRowCount(Session session) {
-        if (multiVersion) {
-            Integer i = sessionRowCount.get(session.getId());
-            long count = i == null ? 0 : i.intValue();
-            count += rowCount;
-            count -= rowCountDiff;
-            return count;
-        }
         return rowCount;
     }
 
@@ -465,49 +419,18 @@ public class PageDataIndex extends PageIndex {
     }
 
     @Override
+    public boolean isFirstColumn(Column column) {
+        return false;
+    }
+
+    @Override
     public void close(Session session) {
         if (trace.isDebugEnabled()) {
             trace.debug("{0} close", this);
         }
-        if (delta != null) {
-            delta.clear();
-        }
-        rowCountDiff = 0;
-        if (sessionRowCount != null) {
-            sessionRowCount.clear();
-        }
         // can not close the index because it might get used afterwards,
         // for example after running recovery
         writeRowCount();
-    }
-
-    Iterator<Row> getDelta() {
-        if (delta == null) {
-            List<Row> e = Collections.emptyList();
-            return e.iterator();
-        }
-        return delta.iterator();
-    }
-
-    private void incrementRowCount(int sessionId, int count) {
-        if (multiVersion) {
-            Integer id = sessionId;
-            Integer c = sessionRowCount.get(id);
-            int current = c == null ? 0 : c.intValue();
-            sessionRowCount.put(id, current + count);
-            rowCountDiff += count;
-        }
-    }
-
-    @Override
-    public void commit(int operation, Row row) {
-        if (multiVersion) {
-            if (delta != null) {
-                delta.remove(row);
-            }
-            incrementRowCount(row.getSessionId(),
-                    operation == UndoLogRecord.DELETE ? 1 : -1);
-        }
     }
 
     /**
@@ -557,7 +480,7 @@ public class PageDataIndex extends PageIndex {
 
     @Override
     public String getPlanSQL() {
-        return table.getSQL() + ".tableScan";
+        return table.getSQL(new StringBuilder(), false).append(".tableScan").toString();
     }
 
     int getMemoryPerPage() {

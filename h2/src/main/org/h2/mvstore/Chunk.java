@@ -1,11 +1,12 @@
 /*
- * Copyright 2004-2014 H2 Group. Multiple-Licensed under the MPL 2.0,
- * and the EPL 1.0 (http://h2database.com/html/license.html).
+ * Copyright 2004-2019 H2 Group. Multiple-Licensed under the MPL 2.0,
+ * and the EPL 1.0 (https://h2database.com/html/license.html).
  * Initial Developer: H2 Group
  */
 package org.h2.mvstore;
 
 import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 
 /**
@@ -98,6 +99,12 @@ public class Chunk {
     public long unused;
 
     /**
+     * Version of the store at which chunk become unused and therefore can be
+     * considered "dead" and collected after this version is no longer in use.
+     */
+    public long unusedAtVersion;
+
+    /**
      * The last used map id.
      */
     public int mapId;
@@ -127,7 +134,7 @@ public class Chunk {
                 if (data[i] == '\n') {
                     // set the position to the start of the first page
                     buff.position(pos + i + 1);
-                    String s = new String(data, 0, i, DataUtils.LATIN).trim();
+                    String s = new String(data, 0, i, StandardCharsets.ISO_8859_1).trim();
                     return fromString(s);
                 }
             }
@@ -150,7 +157,7 @@ public class Chunk {
      */
     void writeChunkHeader(WriteBuffer buff, int minLength) {
         long pos = buff.position();
-        buff.put(asString().getBytes(DataUtils.LATIN));
+        buff.put(asString().getBytes(StandardCharsets.ISO_8859_1));
         while (buff.position() - pos < minLength - 1) {
             buff.put((byte) ' ');
         }
@@ -192,6 +199,7 @@ public class Chunk {
         c.metaRootPos = DataUtils.readHexLong(map, "root", 0);
         c.time = DataUtils.readHexLong(map, "time", 0);
         c.unused = DataUtils.readHexLong(map, "unused", 0);
+        c.unusedAtVersion = DataUtils.readHexLong(map, "unusedAtVersion", 0);
         c.version = DataUtils.readHexLong(map, "version", id);
         c.next = DataUtils.readHexLong(map, "next", 0);
         return c;
@@ -227,7 +235,7 @@ public class Chunk {
      * @return the string
      */
     public String asString() {
-        StringBuilder buff = new StringBuilder();
+        StringBuilder buff = new StringBuilder(240);
         DataUtils.appendMap(buff, "chunk", id);
         DataUtils.appendMap(buff, "block", block);
         DataUtils.appendMap(buff, "len", len);
@@ -248,23 +256,26 @@ public class Chunk {
         if (unused != 0) {
             DataUtils.appendMap(buff, "unused", unused);
         }
+        if (unusedAtVersion != 0) {
+            DataUtils.appendMap(buff, "unusedAtVersion", unusedAtVersion);
+        }
         DataUtils.appendMap(buff, "version", version);
         return buff.toString();
     }
 
     byte[] getFooterBytes() {
-        StringBuilder buff = new StringBuilder();
+        StringBuilder buff = new StringBuilder(FOOTER_LENGTH);
         DataUtils.appendMap(buff, "chunk", id);
         DataUtils.appendMap(buff, "block", block);
         DataUtils.appendMap(buff, "version", version);
-        byte[] bytes = buff.toString().getBytes(DataUtils.LATIN);
-        int checksum = DataUtils.getFletcher32(bytes, bytes.length);
+        byte[] bytes = buff.toString().getBytes(StandardCharsets.ISO_8859_1);
+        int checksum = DataUtils.getFletcher32(bytes, 0, bytes.length);
         DataUtils.appendMap(buff, "fletcher", checksum);
-        while (buff.length() < Chunk.FOOTER_LENGTH - 1) {
+        while (buff.length() < FOOTER_LENGTH - 1) {
             buff.append(' ');
         }
-        buff.append("\n");
-        return buff.toString().getBytes(DataUtils.LATIN);
+        buff.append('\n');
+        return buff.toString().getBytes(StandardCharsets.ISO_8859_1);
     }
 
     @Override

@@ -1,6 +1,6 @@
 /*
- * Copyright 2004-2014 H2 Group. Multiple-Licensed under the MPL 2.0,
- * and the EPL 1.0 (http://h2database.com/html/license.html).
+ * Copyright 2004-2019 H2 Group. Multiple-Licensed under the MPL 2.0,
+ * and the EPL 1.0 (https://h2database.com/html/license.html).
  * Initial Developer: H2 Group
  */
 package org.h2.server;
@@ -14,19 +14,19 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.HashSet;
-import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+
 import org.h2.Driver;
 import org.h2.api.ErrorCode;
 import org.h2.engine.Constants;
 import org.h2.message.DbException;
 import org.h2.util.JdbcUtils;
 import org.h2.util.NetUtils;
-import org.h2.util.New;
 import org.h2.util.StringUtils;
 import org.h2.util.Tool;
 
@@ -49,8 +49,7 @@ public class TcpServer implements Service {
      */
     private static final String MANAGEMENT_DB_PREFIX = "management_db_";
 
-    private static final Map<Integer, TcpServer> SERVERS =
-            Collections.synchronizedMap(new HashMap<Integer, TcpServer>());
+    private static final ConcurrentHashMap<Integer, TcpServer> SERVERS = new ConcurrentHashMap<>();
 
     private int port;
     private boolean portIsSet;
@@ -64,7 +63,7 @@ public class TcpServer implements Service {
     private String baseDir;
     private boolean allowOthers;
     private boolean isDaemon;
-    private boolean ifExists;
+    private boolean ifExists = true;
     private Connection managementDb;
     private PreparedStatement managementDbAdd;
     private PreparedStatement managementDbRemove;
@@ -92,9 +91,8 @@ public class TcpServer implements Service {
         Connection conn = Driver.load().connect("jdbc:h2:" +
                 getManagementDbName(port), prop);
         managementDb = conn;
-        Statement stat = null;
-        try {
-            stat = conn.createStatement();
+
+        try (Statement stat = conn.createStatement()) {
             stat.execute("CREATE ALIAS IF NOT EXISTS STOP_SERVER FOR \"" +
                     TcpServer.class.getName() + ".stopServer\"");
             stat.execute("CREATE TABLE IF NOT EXISTS SESSIONS" +
@@ -104,8 +102,6 @@ public class TcpServer implements Service {
                     "INSERT INTO SESSIONS VALUES(?, ?, ?, NOW())");
             managementDbRemove = conn.prepareStatement(
                     "DELETE FROM SESSIONS WHERE ID=?");
-        } finally {
-            JdbcUtils.closeSilently(stat);
         }
         SERVERS.put(port, this);
     }
@@ -191,6 +187,8 @@ public class TcpServer implements Service {
                 isDaemon = true;
             } else if (Tool.isOption(a, "-ifExists")) {
                 ifExists = true;
+            } else if (Tool.isOption(a, "-ifNotExists")) {
+                ifExists = false;
             }
         }
         org.h2.Driver.load();
@@ -309,7 +307,7 @@ public class TcpServer implements Service {
             }
         }
         // TODO server: using a boolean 'now' argument? a timeout?
-        for (TcpServerThread c : New.arrayList(running)) {
+        for (TcpServerThread c : new ArrayList<>(running)) {
             if (c != null) {
                 c.close();
                 try {
@@ -486,7 +484,7 @@ public class TcpServer implements Service {
      * @param statementId the statement id
      */
     void cancelStatement(String sessionId, int statementId) {
-        for (TcpServerThread c : New.arrayList(running)) {
+        for (TcpServerThread c : new ArrayList<>(running)) {
             if (c != null) {
                 c.cancelStatement(sessionId, statementId);
             }

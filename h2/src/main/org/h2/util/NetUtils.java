@@ -1,6 +1,6 @@
 /*
- * Copyright 2004-2014 H2 Group. Multiple-Licensed under the MPL 2.0,
- * and the EPL 1.0 (http://h2database.com/html/license.html).
+ * Copyright 2004-2019 H2 Group. Multiple-Licensed under the MPL 2.0,
+ * and the EPL 1.0 (https://h2database.com/html/license.html).
  * Initial Developer: H2 Group
  */
 package org.h2.util;
@@ -13,6 +13,7 @@ import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.UnknownHostException;
+import java.util.concurrent.TimeUnit;
 
 import org.h2.api.ErrorCode;
 import org.h2.engine.SysProperties;
@@ -43,12 +44,9 @@ public class NetUtils {
      */
     public static Socket createLoopbackSocket(int port, boolean ssl)
             throws IOException {
-        InetAddress address = getBindAddress();
-        if (address == null) {
-            address = InetAddress.getLocalHost();
-        }
+        String local = getLocalAddress();
         try {
-            return createSocket(getHostAddress(address), port, ssl);
+            return createSocket(local, port, ssl);
         } catch (IOException e) {
             try {
                 return createSocket("localhost", port, ssl);
@@ -57,23 +55,6 @@ public class NetUtils {
                 throw e;
             }
         }
-    }
-
-    /**
-     * Get the host address. This method adds '[' and ']' if required for
-     * Inet6Address that contain a ':'.
-     *
-     * @param address the address
-     * @return the host address
-     */
-    private static String getHostAddress(InetAddress address) {
-        String host = address.getHostAddress();
-        if (address instanceof Inet6Address) {
-            if (host.indexOf(':') >= 0 && !host.startsWith("[")) {
-                host = "[" + host + "]";
-            }
-        }
-        return host;
     }
 
     /**
@@ -112,7 +93,7 @@ public class NetUtils {
      */
     public static Socket createSocket(InetAddress address, int port, boolean ssl)
             throws IOException {
-        long start = System.currentTimeMillis();
+        long start = System.nanoTime();
         for (int i = 0;; i++) {
             try {
                 if (ssl) {
@@ -123,8 +104,8 @@ public class NetUtils {
                         SysProperties.SOCKET_CONNECT_TIMEOUT);
                 return socket;
             } catch (IOException e) {
-                if (System.currentTimeMillis() - start >=
-                        SysProperties.SOCKET_CONNECT_TIMEOUT) {
+                if (System.nanoTime() - start >=
+                        TimeUnit.MILLISECONDS.toNanos(SysProperties.SOCKET_CONNECT_TIMEOUT)) {
                     // either it was a connect timeout,
                     // or list of different exceptions
                     throw e;
@@ -174,7 +155,7 @@ public class NetUtils {
      */
     private static InetAddress getBindAddress() throws UnknownHostException {
         String host = SysProperties.BIND_ADDRESS;
-        if (host == null || host.length() == 0) {
+        if (host == null || host.isEmpty()) {
             return null;
         }
         synchronized (NetUtils.class) {
@@ -197,7 +178,7 @@ public class NetUtils {
             return new ServerSocket(port, 0, bindAddress);
         } catch (BindException be) {
             throw DbException.get(ErrorCode.EXCEPTION_OPENING_PORT_2,
-                    be, "" + port, be.toString());
+                    be, Integer.toString(port), be.toString());
         } catch (IOException e) {
             throw DbException.convertIOException(e, "port: " + port + " ssl: " + ssl);
         }
@@ -216,7 +197,7 @@ public class NetUtils {
             return true;
         }
         InetAddress localhost = InetAddress.getLocalHost();
-        // localhost.getCanonicalHostName() is very very slow
+        // localhost.getCanonicalHostName() is very slow
         String host = localhost.getHostAddress();
         for (InetAddress addr : InetAddress.getAllByName(host)) {
             if (test.equals(addr)) {
@@ -250,9 +231,9 @@ public class NetUtils {
      * @return the local host address
      */
     public static synchronized String getLocalAddress() {
-        long now = System.currentTimeMillis();
+        long now = System.nanoTime();
         if (cachedLocalAddress != null) {
-            if (cachedLocalAddressTime + CACHE_MILLIS > now) {
+            if (cachedLocalAddressTime + TimeUnit.MILLISECONDS.toNanos(CACHE_MILLIS) > now) {
                 return cachedLocalAddress;
             }
         }
@@ -273,7 +254,21 @@ public class NetUtils {
                 throw DbException.convert(e);
             }
         }
-        String address = bind == null ? "localhost" : getHostAddress(bind);
+        String address;
+        if (bind == null) {
+            address = "localhost";
+        } else {
+            address = bind.getHostAddress();
+            if (bind instanceof Inet6Address) {
+                if (address.indexOf('%') >= 0) {
+                    address = "localhost";
+                } else if (address.indexOf(':') >= 0 && !address.startsWith("[")) {
+                    // adds'[' and ']' if required for
+                    // Inet6Address that contain a ':'.
+                    address = "[" + address + "]";
+                }
+            }
+        }
         if (address.equals("127.0.0.1")) {
             address = "localhost";
         }

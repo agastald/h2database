@@ -1,13 +1,17 @@
 /*
- * Copyright 2004-2014 H2 Group. Multiple-Licensed under the MPL 2.0,
- * and the EPL 1.0 (http://h2database.com/html/license.html).
+ * Copyright 2004-2019 H2 Group. Multiple-Licensed under the MPL 2.0,
+ * and the EPL 1.0 (https://h2database.com/html/license.html).
  * Initial Developer: H2 Group
  */
 package org.h2.index;
 
-import java.util.HashSet;
+import static org.h2.util.geometry.GeometryUtils.MAX_X;
+import static org.h2.util.geometry.GeometryUtils.MAX_Y;
+import static org.h2.util.geometry.GeometryUtils.MIN_X;
+import static org.h2.util.geometry.GeometryUtils.MIN_Y;
+
 import java.util.Iterator;
-import org.h2.engine.Constants;
+import org.h2.command.dml.AllColumnsForPlan;
 import org.h2.engine.Session;
 import org.h2.message.DbException;
 import org.h2.mvstore.MVStore;
@@ -24,8 +28,6 @@ import org.h2.table.TableFilter;
 import org.h2.value.Value;
 import org.h2.value.ValueGeometry;
 import org.h2.value.ValueNull;
-import com.vividsolutions.jts.geom.Envelope;
-import com.vividsolutions.jts.geom.Geometry;
 
 /**
  * This is an index based on a MVR-TreeMap.
@@ -59,6 +61,7 @@ public class SpatialTreeIndex extends BaseIndex implements SpatialIndex {
     public SpatialTreeIndex(Table table, int id, String indexName,
             IndexColumn[] columns, IndexType indexType, boolean persistent,
             boolean create, Session session) {
+        super(table, id, indexName, columns, indexType);
         if (indexType.isUnique()) {
             throw DbException.getUnsupportedException("not unique");
         }
@@ -82,11 +85,9 @@ public class SpatialTreeIndex extends BaseIndex implements SpatialIndex {
             throw DbException.getUnsupportedException(
                     "cannot do nulls last");
         }
-        initBaseIndex(table, id, indexName, columns, indexType);
         this.needRebuild = create;
-        this.table = table;
         if (!database.isStarting()) {
-            if (columns[0].column.getType() != Value.GEOMETRY) {
+            if (columns[0].column.getType().getValueType() != Value.GEOMETRY) {
                 throw DbException.getUnsupportedException(
                         "spatial index on non-geometry column, " +
                         columns[0].column.getCreateSQL());
@@ -103,7 +104,7 @@ public class SpatialTreeIndex extends BaseIndex implements SpatialIndex {
                         "Persistent index with id<0");
             }
             MVTableEngine.init(session.getDatabase());
-            store = session.getDatabase().getMvStore().getStore();
+            store = session.getDatabase().getStore().getMvStore();
             // Called after CREATE SPATIAL INDEX or
             // by PageStore.addMeta
             treeMap =  store.openMap(MAP_PREFIX + getId(),
@@ -133,14 +134,13 @@ public class SpatialTreeIndex extends BaseIndex implements SpatialIndex {
             return null;
         }
         Value v = row.getValue(columnIds[0]);
-        if (v == ValueNull.INSTANCE) {
-            return null;
+        double[] env;
+        if (v == ValueNull.INSTANCE ||
+                (env = ((ValueGeometry) v.convertTo(Value.GEOMETRY)).getEnvelopeNoCopy()) == null) {
+            return new SpatialKey(row.getKey());
         }
-        Geometry g = ((ValueGeometry) v.convertTo(Value.GEOMETRY)).getGeometryNoCopy();
-        Envelope env = g.getEnvelopeInternal();
         return new SpatialKey(row.getKey(),
-                (float) env.getMinX(), (float) env.getMaxX(),
-                (float) env.getMinY(), (float) env.getMaxY());
+                (float) env[MIN_X], (float) env[MAX_X], (float) env[MIN_Y], (float) env[MAX_Y]);
     }
 
     @Override
@@ -168,9 +168,10 @@ public class SpatialTreeIndex extends BaseIndex implements SpatialIndex {
     }
 
     @Override
-    public Cursor findByGeometry(TableFilter filter, SearchRow intersection) {
+    public Cursor findByGeometry(TableFilter filter, SearchRow first,
+            SearchRow last, SearchRow intersection) {
         if (intersection == null) {
-            return find(filter.getSession());
+            return find(filter.getSession(), first, last);
         }
         return new SpatialCursor(
                 treeMap.findIntersectingKeys(getKey(intersection)), table,
@@ -180,31 +181,29 @@ public class SpatialTreeIndex extends BaseIndex implements SpatialIndex {
     /**
      * Compute spatial index cost
      * @param masks Search mask
-     * @param rowCount Table row count
      * @param columns Table columns
      * @return Index cost hint
      */
-    public static long getCostRangeIndex(int[] masks, long rowCount, Column[] columns) {
-        rowCount += Constants.COST_ROW_OFFSET;
-        long cost = rowCount;
-        if (masks == null) {
-            return cost;
+    public static long getCostRangeIndex(int[] masks, Column[] columns) {
+        // Never use spatial tree index without spatial filter
+        if (columns.length == 0) {
+            return Long.MAX_VALUE;
         }
         for (Column column : columns) {
             int index = column.getColumnId();
             int mask = masks[index];
-            if ((mask & IndexCondition.SPATIAL_INTERSECTS) != 0) {
-                cost = 3 + rowCount / 4;
+            if ((mask & IndexCondition.SPATIAL_INTERSECTS) != IndexCondition.SPATIAL_INTERSECTS) {
+                return Long.MAX_VALUE;
             }
         }
-        return 10 * cost;
+        return 2;
     }
 
     @Override
     public double getCost(Session session, int[] masks,
             TableFilter[] filters, int filter, SortOrder sortOrder,
-            HashSet<Column> allColumnsSet) {
-        return getCostRangeIndex(masks, table.getRowCountApproximation(), columns);
+            AllColumnsForPlan allColumnsSet) {
+        return getCostRangeIndex(masks, columns);
     }
 
 
@@ -238,7 +237,7 @@ public class SpatialTreeIndex extends BaseIndex implements SpatialIndex {
     @Override
     public Cursor findFirstOrLast(Session session, boolean first) {
         if (closed) {
-            throw DbException.throwInternalError();
+            throw DbException.throwInternalError(toString());
         }
         if (!first) {
             throw DbException.throwInternalError(
@@ -271,7 +270,7 @@ public class SpatialTreeIndex extends BaseIndex implements SpatialIndex {
         private final Iterator<SpatialKey> it;
         private SpatialKey current;
         private final Table table;
-        private Session session;
+        private final Session session;
 
         public SpatialCursor(Iterator<SpatialKey> it, Table table, Session session) {
             this.it = it;

@@ -1,6 +1,6 @@
 /*
- * Copyright 2004-2014 H2 Group. Multiple-Licensed under the MPL 2.0,
- * and the EPL 1.0 (http://h2database.com/html/license.html).
+ * Copyright 2004-2019 H2 Group. Multiple-Licensed under the MPL 2.0,
+ * and the EPL 1.0 (https://h2database.com/html/license.html).
  * Initial Developer: H2 Group
  */
 package org.h2.index;
@@ -171,8 +171,7 @@ public class PageBtreeNode extends PageBtree {
             }
             last = entryCount == 0 ? pageSize : offsets[entryCount - 1];
             rowLength = index.getRowSize(data, row, true);
-            if (SysProperties.CHECK && last - rowLength <
-                    start + CHILD_OFFSET_PAIR_LENGTH) {
+            if (last - rowLength < start + CHILD_OFFSET_PAIR_LENGTH) {
                 throw DbException.throwInternalError();
             }
         }
@@ -250,7 +249,7 @@ public class PageBtreeNode extends PageBtree {
         }
         int firstChild = childPageIds[splitPoint];
         readAllRows();
-        for (int i = splitPoint; i < entryCount;) {
+        while (splitPoint < entryCount) {
             p2.addChild(p2.entryCount, childPageIds[splitPoint + 1], getRow(splitPoint));
             removeChild(splitPoint);
         }
@@ -474,7 +473,7 @@ public class PageBtreeNode extends PageBtree {
         written = false;
         changeCount = index.getPageStore().getChangeCount();
         if (entryCount < 0) {
-            DbException.throwInternalError();
+            DbException.throwInternalError(Integer.toString(entryCount));
         }
         if (entryCount > i) {
             int startNext = i > 0 ? offsets[i - 1] : index.getPageStore().getPageSize();
@@ -604,7 +603,7 @@ public class PageBtreeNode extends PageBtree {
                 return;
             }
         }
-        throw DbException.throwInternalError();
+        throw DbException.throwInternalError(oldPos + " " + newPos);
     }
 
 }

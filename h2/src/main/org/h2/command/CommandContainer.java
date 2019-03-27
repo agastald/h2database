@@ -1,17 +1,20 @@
 /*
- * Copyright 2004-2014 H2 Group. Multiple-Licensed under the MPL 2.0,
- * and the EPL 1.0 (http://h2database.com/html/license.html).
+ * Copyright 2004-2019 H2 Group. Multiple-Licensed under the MPL 2.0,
+ * and the EPL 1.0 (https://h2database.com/html/license.html).
  * Initial Developer: H2 Group
  */
 package org.h2.command;
 
 import java.util.ArrayList;
+import java.util.List;
 import org.h2.api.DatabaseEventListener;
 import org.h2.command.dml.Explain;
 import org.h2.command.dml.Query;
+import org.h2.engine.Session;
 import org.h2.expression.Parameter;
 import org.h2.expression.ParameterInterface;
 import org.h2.result.ResultInterface;
+import org.h2.table.TableView;
 import org.h2.value.Value;
 import org.h2.value.ValueNull;
 
@@ -25,8 +28,37 @@ public class CommandContainer extends Command {
     private boolean readOnlyKnown;
     private boolean readOnly;
 
-    CommandContainer(Parser parser, String sql, Prepared prepared) {
-        super(parser, sql);
+    /**
+     * Clears CTE views for a specified statement.
+     *
+     * @param session the session
+     * @param prepared prepared statement
+     */
+    static void clearCTE(Session session, Prepared prepared) {
+        List<TableView> cteCleanups = prepared.getCteCleanups();
+        if (cteCleanups != null) {
+            clearCTE(session, cteCleanups);
+        }
+    }
+
+    /**
+     * Clears CTE views.
+     *
+     * @param session the session
+     * @param views list of view
+     */
+    static void clearCTE(Session session, List<TableView> views) {
+        for (TableView view : views) {
+            // check if view was previously deleted as their name is set to
+            // null
+            if (view.getName() != null) {
+                session.removeLocalTempTable(view);
+            }
+        }
+    }
+
+    CommandContainer(Session session, String sql, Prepared prepared) {
+        super(session, sql);
         prepared.setCommand(this);
         this.prepared = prepared;
     }
@@ -55,9 +87,12 @@ public class CommandContainer extends Command {
 
     private static void prepareJoinBatch(Prepared prepared) {
         if (prepared.isQuery()) {
-            if (prepared.getType() == CommandInterface.SELECT) {
+            int type = prepared.getType();
+
+            if (type == CommandInterface.SELECT) {
                 ((Query) prepared).prepareJoinBatch();
-            } else if (prepared.getType() == CommandInterface.EXPLAIN) {
+            } else if (type == CommandInterface.EXPLAIN ||
+                    type == CommandInterface.EXPLAIN_ANALYZE) {
                 prepareJoinBatch(((Explain) prepared).getCommand());
             }
         }
@@ -96,7 +131,7 @@ public class CommandContainer extends Command {
         session.setLastScopeIdentity(ValueNull.INSTANCE);
         prepared.checkParameters();
         int updateCount = prepared.update();
-        prepared.trace(startTime, updateCount);
+        prepared.trace(startTimeNanos, updateCount);
         setProgress(DatabaseEventListener.STATE_STATEMENT_END);
         return updateCount;
     }
@@ -108,9 +143,22 @@ public class CommandContainer extends Command {
         start();
         prepared.checkParameters();
         ResultInterface result = prepared.query(maxrows);
-        prepared.trace(startTime, result.getRowCount());
+        prepared.trace(startTimeNanos, result.isLazy() ? 0 : result.getRowCount());
         setProgress(DatabaseEventListener.STATE_STATEMENT_END);
         return result;
+    }
+
+    @Override
+    public void stop() {
+        super.stop();
+        // Clean up after the command was run in the session.
+        // Must restart query (and dependency construction) to reuse.
+        clearCTE(session, prepared);
+    }
+
+    @Override
+    public boolean canReuse() {
+        return super.canReuse() && prepared.getCteCleanups() == null;
     }
 
     @Override
@@ -135,6 +183,13 @@ public class CommandContainer extends Command {
     @Override
     public int getCommandType() {
         return prepared.getType();
+    }
+
+    /**
+     * Clean up any associated CTE.
+     */
+    void clearCTE() {
+        clearCTE(session, prepared);
     }
 
 }

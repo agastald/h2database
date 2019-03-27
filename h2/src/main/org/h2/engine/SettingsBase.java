@@ -1,6 +1,6 @@
 /*
- * Copyright 2004-2014 H2 Group. Multiple-Licensed under the MPL 2.0,
- * and the EPL 1.0 (http://h2database.com/html/license.html).
+ * Copyright 2004-2019 H2 Group. Multiple-Licensed under the MPL 2.0,
+ * and the EPL 1.0 (https://h2database.com/html/license.html).
  * Initial Developer: H2 Group
  */
 package org.h2.engine;
@@ -30,10 +30,10 @@ public class SettingsBase {
      * @return the setting
      */
     protected boolean get(String key, boolean defaultValue) {
-        String s = get(key, "" + defaultValue);
+        String s = get(key, Boolean.toString(defaultValue));
         try {
-            return Boolean.parseBoolean(s);
-        } catch (NumberFormatException e) {
+            return Utils.parseBoolean(s, defaultValue, true);
+        } catch (IllegalArgumentException e) {
             throw DbException.get(ErrorCode.DATA_CONVERSION_ERROR_1,
                     e, "key:" + key + " value:" + s);
         }
@@ -47,7 +47,7 @@ public class SettingsBase {
      * @return the setting
      */
     protected int get(String key, int defaultValue) {
-        String s = get(key, "" + defaultValue);
+        String s = get(key, Integer.toString(defaultValue));
         try {
             return Integer.decode(s);
         } catch (NumberFormatException e) {
@@ -64,6 +64,10 @@ public class SettingsBase {
      * @return the setting
      */
     protected String get(String key, String defaultValue) {
+        String v = settings.get(key);
+        if (v != null) {
+            return v;
+        }
         StringBuilder buff = new StringBuilder("h2.");
         boolean nextUpper = false;
         for (char c : key.toCharArray()) {
@@ -76,11 +80,8 @@ public class SettingsBase {
             }
         }
         String sysProperty = buff.toString();
-        String v = settings.get(key);
-        if (v == null) {
-            v = Utils.getProperty(sysProperty, defaultValue);
-            settings.put(key, v);
-        }
+        v = Utils.getProperty(sysProperty, defaultValue);
+        settings.put(key, v);
         return v;
     }
 
